@@ -1,4 +1,5 @@
 @page "/dashboard"
+@using ConcreteDelivery.Messaging.Constants
 @using ConcreteDelivery.Web.Services
 @using Microsoft.AspNetCore.Components.Web
 @inject TruckDashboardService DashboardService
@@ -54,49 +55,49 @@
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "Available")
+                        @if (truck.Status == TruckStatus.Available)
                         {
                             <div class="truck-icon available">🚚</div>
                         }
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "Loading")
+                        @if (truck.Status == TruckStatus.Loading)
                         {
                             <div class="truck-icon loading">🚚</div>
                         }
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "EnRoute")
+                        @if (truck.Status == TruckStatus.EnRoute)
                         {
                             <div class="truck-icon enroute">🚚</div>
                         }
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "AtJobSite")
+                        @if (truck.Status == TruckStatus.AtJobSite)
                         {
                             <div class="truck-icon atjobsite">🚚</div>
                         }
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "Delivering")
+                        @if (truck.Status == TruckStatus.Delivering)
                         {
                             <div class="truck-icon delivering">🚚</div>
                         }
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "Returning")
+                        @if (truck.Status == TruckStatus.Returning)
                         {
                             <div class="truck-icon returning">🚚</div>
                         }
                     </div>
                     
                     <div class="status-column">
-                        @if (truck.Status == "Washing")
+                        @if (truck.Status == TruckStatus.Washing)
                         {
                             <div class="truck-icon washing">🚚</div>
                         }

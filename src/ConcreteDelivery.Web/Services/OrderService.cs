@@ -1,6 +1,7 @@
 using ConcreteDelivery.Data;
 using ConcreteDelivery.Data.Entities;
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 using Microsoft.EntityFrameworkCore;
 
@@ -67,7 +68,7 @@ public class OrderService
         await using var context = await _contextFactory.CreateDbContextAsync();
         return await context.Trucks
             .Include(t => t.CurrentStatus)
-            .Where(t => t.CurrentStatus != null && t.CurrentStatus.Status == "Available")
+            .Where(t => t.CurrentStatus != null && t.CurrentStatus.Status == TruckStatus.Available)
             .ToListAsync();
     }
 

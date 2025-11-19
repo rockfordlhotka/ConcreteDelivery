@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 
 namespace ConcreteDelivery.InventoryService.Services;
@@ -35,8 +36,8 @@ public class TruckEventListener : BackgroundService
             await _messageConsumer.StartConsumingAsync<TruckStatusChangedEvent>(
                 queueName: "inventory-service-truck-status",
                 handler: HandleTruckStatusChangedAsync,
-                exchangeName: "truck-events",
-                routingKey: "truck.status.changed",
+                exchangeName: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.StatusChanged,
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation("Successfully subscribed to truck status events");
@@ -72,7 +73,7 @@ public class TruckEventListener : BackgroundService
                 truckEvent.TruckId, truckEvent.PreviousStatus, truckEvent.NewStatus);
 
             // Check if truck is starting to load materials
-            if (truckEvent.NewStatus.Equals("Loading", StringComparison.OrdinalIgnoreCase))
+            if (truckEvent.NewStatus.Equals(TruckStatus.Loading, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogInformation("Truck {TruckId} is loading - deducting materials from inventory", 
                     truckEvent.TruckId);

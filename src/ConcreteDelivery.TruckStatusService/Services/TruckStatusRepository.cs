@@ -164,4 +164,35 @@ public class TruckStatusRepository
             return null;
         }
     }
+
+    /// <summary>
+    /// Gets all trucks that are assigned to orders but not yet in active workflow
+    /// </summary>
+    public async Task<List<(int TruckId, int OrderId, string DriverName)>> GetAssignedTrucksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            
+            return await context.TruckStatuses
+                .Where(ts => ts.Status == "Assigned" && ts.CurrentOrderId != null)
+                .Include(ts => ts.Truck)
+                .Select(ts => new
+                {
+                    ts.TruckId,
+                    OrderId = ts.CurrentOrderId!.Value,
+                    ts.Truck.DriverName
+                })
+                .ToListAsync(cancellationToken)
+                .ContinueWith(task => task.Result
+                    .Select(x => (x.TruckId, x.OrderId, x.DriverName))
+                    .ToList(), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting assigned trucks");
+            return new List<(int, int, string)>();
+        }
+    }
 }

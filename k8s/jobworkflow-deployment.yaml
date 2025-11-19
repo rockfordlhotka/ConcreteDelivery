@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: concretedelivery-jobworkflow
+  namespace: concretedelivery
+  labels:
+    app: concretedelivery-jobworkflow
+    component: job-workflow-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: concretedelivery-jobworkflow
+  template:
+    metadata:
+      labels:
+        app: concretedelivery-jobworkflow
+        component: job-workflow-service
+    spec:
+      containers:
+      - name: job-workflow-service
+        image: rockylhotka/concretedelivery-jobworkflow:latest
+        imagePullPolicy: Always
+        env:
+        # Database connection string from secret
+        - name: ConnectionStrings__DefaultConnection
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-db-secret
+              key: connection-string
+        # RabbitMQ configuration from secret
+        - name: RabbitMq__Server
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-rabbitmq-secret
+              key: host
+        - name: RabbitMq__User
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-rabbitmq-secret
+              key: username
+        - name: RabbitMq__Password
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-rabbitmq-secret
+              key: password
+        # Application configuration
+        - name: DOTNET_ENVIRONMENT
+          value: "Production"
+        - name: Logging__LogLevel__Default
+          value: "Information"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        # Health checks for worker service (no HTTP endpoints)
+        # Use a simple livenessProbe based on process running
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep -v grep | grep -q ConcreteDelivery.JobWorkflowService
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep -v grep | grep -q ConcreteDelivery.JobWorkflowService
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 
 namespace ConcreteDelivery.TruckStatusService.Services;
@@ -47,10 +48,13 @@ public class TruckSimulationService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Truck Status Service starting up - listening for truck assignments");
+        _logger.LogInformation("Truck Status Service starting up");
 
         try
         {
+            // Process any trucks that are already assigned to orders on startup
+            await ProcessAssignedTrucksAsync(stoppingToken);
+
             // Subscribe to truck assignment events
             await _messageConsumer.StartConsumingAsync<TruckAssignedToOrderEvent>(
                 queueName: "truck-status-service-assignments",
@@ -75,6 +79,66 @@ public class TruckSimulationService : BackgroundService
         {
             _logger.LogError(ex, "Fatal error in Truck Status Service");
             throw;
+        }
+    }
+
+    private async Task ProcessAssignedTrucksAsync(CancellationToken cancellationToken)
+    {
+        using var activity = _activitySource.StartActivity("ProcessAssignedTrucks");
+        
+        try
+        {
+            _logger.LogInformation("Checking for trucks already assigned to orders on startup...");
+
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<TruckStatusRepository>();
+
+            var assignedTrucks = await repository.GetAssignedTrucksAsync(cancellationToken);
+
+            if (assignedTrucks.Count == 0)
+            {
+                _logger.LogInformation("No assigned trucks found");
+                return;
+            }
+
+            _logger.LogInformation(
+                "Found {Count} assigned truck(s) - starting their workflows",
+                assignedTrucks.Count);
+
+            foreach (var (truckId, orderId, driverName) in assignedTrucks)
+            {
+                _logger.LogInformation(
+                    "Starting workflow for truck {TruckId} (driver: {DriverName}) with order {OrderId}",
+                    truckId, driverName, orderId);
+
+                // Create a cancellation token for this specific truck simulation
+                var truckCts = new CancellationTokenSource();
+                _activeTrucks[truckId] = truckCts;
+
+                // Start the simulation in a background task
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await SimulateTruckWorkflowAsync(truckId, orderId, truckCts.Token);
+                    }
+                    finally
+                    {
+                        _activeTrucks.TryRemove(truckId, out _);
+                        truckCts.Dispose();
+                    }
+                }, truckCts.Token);
+            }
+
+            _logger.LogInformation(
+                "Startup processing complete - started workflows for {Count} truck(s)",
+                assignedTrucks.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing assigned trucks on startup");
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // Don't throw - allow service to continue even if startup processing fails
         }
     }
 
@@ -201,19 +265,19 @@ public class TruckSimulationService : BackgroundService
             truckId, LoadingTimeSeconds);
 
         // Update status to Loading
-        await repository.UpdateTruckStatusAsync(truckId, "Loading", orderId, cancellationToken);
-        await repository.UpdateOrderStatusAsync(orderId, "Loading", cancellationToken);
+        await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Loading, orderId, cancellationToken);
+        await repository.UpdateOrderStatusAsync(orderId, TruckStatus.Loading, cancellationToken);
 
         // Publish truck status changed event
         await _messagePublisher.PublishAsync(
             new TruckStatusChangedEvent
             {
                 TruckId = truckId.ToString(),
-                PreviousStatus = "Assigned",
-                NewStatus = "Loading"
+                PreviousStatus = TruckStatus.Available,
+                NewStatus = TruckStatus.Loading
             },
-            exchange: "truck-events",
-            routingKey: "truck.status.changed");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.StatusChanged);
 
         // Simulate loading time
         await Task.Delay(TimeSpan.FromSeconds(LoadingTimeSeconds), cancellationToken);
@@ -223,15 +287,11 @@ public class TruckSimulationService : BackgroundService
             new MaterialsLoadedEvent
             {
                 TruckId = truckId.ToString(),
-                Materials = new Dictionary<string, decimal>
-                {
-                    { "Concrete", 10 }, // 10 cubic yards
-                    { "Sand", 5 },
-                    { "Gravel", 5 }
-                }
+                MaterialType = "Concrete",
+                Quantity = 10 // cubic yards
             },
-            exchange: "truck-events",
-            routingKey: "truck.materials.loaded");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.MaterialsLoaded);
 
         _logger.LogInformation("Truck {TruckId}: Loading complete", truckId);
     }
@@ -247,7 +307,7 @@ public class TruckSimulationService : BackgroundService
             truckId, travelTimeSeconds);
 
         // Update status to EnRoute
-        await repository.UpdateTruckStatusAsync(truckId, "EnRoute", orderId, cancellationToken);
+        await repository.UpdateTruckStatusAsync(truckId, TruckStatus.EnRoute, orderId, cancellationToken);
         await repository.UpdateOrderStatusAsync(orderId, "InTransit", cancellationToken);
 
         // Publish status changed event
@@ -255,11 +315,11 @@ public class TruckSimulationService : BackgroundService
             new TruckStatusChangedEvent
             {
                 TruckId = truckId.ToString(),
-                PreviousStatus = "Loading",
-                NewStatus = "EnRoute"
+                PreviousStatus = TruckStatus.Loading,
+                NewStatus = TruckStatus.EnRoute
             },
-            exchange: "truck-events",
-            routingKey: "truck.status.changed");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.StatusChanged);
 
         // Publish order in transit event
         await _messagePublisher.PublishAsync(
@@ -268,8 +328,8 @@ public class TruckSimulationService : BackgroundService
                 OrderId = orderId,
                 TruckId = truckId
             },
-            exchange: "order-events",
-            routingKey: "order.status.intransit");
+            exchange: ExchangeNames.OrderEvents,
+            routingKey: RoutingKeys.Order.InTransit);
 
         // Simulate travel time
         await Task.Delay(TimeSpan.FromSeconds(travelTimeSeconds), cancellationToken);
@@ -281,8 +341,8 @@ public class TruckSimulationService : BackgroundService
                 TruckId = truckId.ToString(),
                 JobSiteId = orderId.ToString()
             },
-            exchange: "truck-events",
-            routingKey: "truck.arrived.jobsite");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.ArrivedAtJobSite);
 
         _logger.LogInformation("Truck {TruckId}: Arrived at job site", truckId);
     }
@@ -297,8 +357,8 @@ public class TruckSimulationService : BackgroundService
             truckId, DeliveryTimeSeconds);
 
         // Update status to Delivering
-        await repository.UpdateTruckStatusAsync(truckId, "Delivering", orderId, cancellationToken);
-        await repository.UpdateOrderStatusAsync(orderId, "Delivering", cancellationToken);
+        await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Delivering, orderId, cancellationToken);
+        await repository.UpdateOrderStatusAsync(orderId, TruckStatus.Delivering, cancellationToken);
 
         // Publish pouring started event
         await _messagePublisher.PublishAsync(
@@ -307,8 +367,8 @@ public class TruckSimulationService : BackgroundService
                 TruckId = truckId.ToString(),
                 JobSiteId = orderId.ToString()
             },
-            exchange: "truck-events",
-            routingKey: "truck.pouring.started");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.PouringStarted);
 
         // Simulate delivery time
         await Task.Delay(TimeSpan.FromSeconds(DeliveryTimeSeconds), cancellationToken);
@@ -321,8 +381,8 @@ public class TruckSimulationService : BackgroundService
                 JobSiteId = orderId.ToString(),
                 AmountPoured = 10 // cubic yards
             },
-            exchange: "truck-events",
-            routingKey: "truck.pouring.completed");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.PouringCompleted);
 
         _logger.LogInformation("Truck {TruckId}: Delivery complete", truckId);
     }
@@ -338,18 +398,18 @@ public class TruckSimulationService : BackgroundService
             truckId, travelTimeSeconds);
 
         // Update status to Returning
-        await repository.UpdateTruckStatusAsync(truckId, "Returning", orderId, cancellationToken);
+        await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Returning, orderId, cancellationToken);
 
         // Publish status changed event
         await _messagePublisher.PublishAsync(
             new TruckStatusChangedEvent
             {
                 TruckId = truckId.ToString(),
-                PreviousStatus = "Delivering",
-                NewStatus = "Returning"
+                PreviousStatus = TruckStatus.Delivering,
+                NewStatus = TruckStatus.Returning
             },
-            exchange: "truck-events",
-            routingKey: "truck.status.changed");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.StatusChanged);
 
         // Simulate travel time
         await Task.Delay(TimeSpan.FromSeconds(travelTimeSeconds), cancellationToken);
@@ -360,8 +420,8 @@ public class TruckSimulationService : BackgroundService
             {
                 TruckId = truckId.ToString()
             },
-            exchange: "truck-events",
-            routingKey: "truck.returned.plant");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.ReturnedToPlant);
 
         _logger.LogInformation("Truck {TruckId}: Returned to yard", truckId);
     }
@@ -376,7 +436,7 @@ public class TruckSimulationService : BackgroundService
             truckId, WashingTimeSeconds);
 
         // Update status to Washing
-        await repository.UpdateTruckStatusAsync(truckId, "Washing", orderId, cancellationToken);
+        await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Washing, orderId, cancellationToken);
 
         // Publish wash started event
         await _messagePublisher.PublishAsync(
@@ -384,8 +444,8 @@ public class TruckSimulationService : BackgroundService
             {
                 TruckId = truckId.ToString()
             },
-            exchange: "truck-events",
-            routingKey: "truck.wash.started");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.WashStarted);
 
         // Simulate wash time
         await Task.Delay(TimeSpan.FromSeconds(WashingTimeSeconds), cancellationToken);
@@ -396,8 +456,8 @@ public class TruckSimulationService : BackgroundService
             {
                 TruckId = truckId.ToString()
             },
-            exchange: "truck-events",
-            routingKey: "truck.wash.completed");
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.WashCompleted);
 
         _logger.LogInformation("Truck {TruckId}: Wash complete", truckId);
     }
@@ -411,7 +471,7 @@ public class TruckSimulationService : BackgroundService
         _logger.LogInformation("Truck {TruckId}: Completing workflow", truckId);
 
         // Update status to Available (no order)
-        await repository.UpdateTruckStatusAsync(truckId, "Available", null, cancellationToken);
+        await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Available, null, cancellationToken);
         await repository.UpdateOrderStatusAsync(orderId, "Delivered", cancellationToken);
 
         // Publish truck idle event
@@ -420,7 +480,7 @@ public class TruckSimulationService : BackgroundService
             {
                 TruckId = truckId.ToString()
             },
-            exchange: "truck-events",
+            exchange: ExchangeNames.TruckEvents,
             routingKey: "truck.idle");
 
         // Publish order delivered event
@@ -431,8 +491,8 @@ public class TruckSimulationService : BackgroundService
                 TruckId = truckId,
                 DeliveredAt = DateTime.UtcNow
             },
-            exchange: "order-events",
-            routingKey: "order.delivered");
+            exchange: ExchangeNames.OrderEvents,
+            routingKey: RoutingKeys.Order.Delivered);
 
         _logger.LogInformation("Truck {TruckId}: Now available for new orders", truckId);
     }

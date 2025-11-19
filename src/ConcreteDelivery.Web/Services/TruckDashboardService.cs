@@ -1,5 +1,6 @@
 using ConcreteDelivery.Data;
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
@@ -85,8 +86,8 @@ public class TruckDashboardService : IDisposable
             connection, 
             loggerFactory,
             "dashboard.truck.status.changed",
-            "truck.events",
-            "truck.status.changed",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.StatusChanged,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
@@ -118,29 +119,13 @@ public class TruckDashboardService : IDisposable
             connection,
             loggerFactory,
             "dashboard.truck.materials.loaded",
-            "truck.events",
-            "truck.materials.loaded",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.MaterialsLoaded,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
                 {
-                    UpdateTruckStatus(truckId, "Loading", message.CreatedAt);
-                }
-                await Task.CompletedTask;
-            });
-
-        // Subscribe to departed events
-        await SubscribeToEventAsync<DepartedForJobSiteEvent>(
-            connection,
-            loggerFactory,
-            "dashboard.truck.departed",
-            "truck.events",
-            "truck.departed",
-            async (message) =>
-            {
-                if (int.TryParse(message.TruckId, out var truckId))
-                {
-                    UpdateTruckStatus(truckId, "EnRoute", message.CreatedAt);
+                    UpdateTruckStatus(truckId, TruckStatus.Loading, message.CreatedAt);
                 }
                 await Task.CompletedTask;
             });
@@ -150,13 +135,13 @@ public class TruckDashboardService : IDisposable
             connection,
             loggerFactory,
             "dashboard.truck.arrived",
-            "truck.events",
-            "truck.arrived",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.ArrivedAtJobSite,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
                 {
-                    UpdateTruckStatus(truckId, "AtJobSite", message.CreatedAt);
+                    UpdateTruckStatus(truckId, TruckStatus.AtJobSite, message.CreatedAt);
                 }
                 await Task.CompletedTask;
             });
@@ -166,13 +151,13 @@ public class TruckDashboardService : IDisposable
             connection,
             loggerFactory,
             "dashboard.truck.pouring.started",
-            "truck.events",
-            "truck.pouring.started",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.PouringStarted,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
                 {
-                    UpdateTruckStatus(truckId, "Delivering", message.CreatedAt);
+                    UpdateTruckStatus(truckId, TruckStatus.Delivering, message.CreatedAt);
                 }
                 await Task.CompletedTask;
             });
@@ -182,13 +167,13 @@ public class TruckDashboardService : IDisposable
             connection,
             loggerFactory,
             "dashboard.truck.pouring.completed",
-            "truck.events",
-            "truck.pouring.completed",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.PouringCompleted,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
                 {
-                    UpdateTruckStatus(truckId, "Returning", message.CreatedAt);
+                    UpdateTruckStatus(truckId, TruckStatus.Returning, message.CreatedAt);
                 }
                 await Task.CompletedTask;
             });
@@ -198,13 +183,13 @@ public class TruckDashboardService : IDisposable
             connection,
             loggerFactory,
             "dashboard.truck.wash.started",
-            "truck.events",
-            "truck.wash.started",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.WashStarted,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
                 {
-                    UpdateTruckStatus(truckId, "Washing", message.CreatedAt);
+                    UpdateTruckStatus(truckId, TruckStatus.Washing, message.CreatedAt);
                 }
                 await Task.CompletedTask;
             });
@@ -214,13 +199,13 @@ public class TruckDashboardService : IDisposable
             connection,
             loggerFactory,
             "dashboard.truck.returned",
-            "truck.events",
-            "truck.returned",
+            ExchangeNames.TruckEvents,
+            RoutingKeys.Truck.ReturnedToPlant,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))
                 {
-                    UpdateTruckStatus(truckId, "Available", message.CreatedAt);
+                    UpdateTruckStatus(truckId, TruckStatus.Available, message.CreatedAt);
                 }
                 await Task.CompletedTask;
             });
