@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 
 namespace ConcreteDelivery.JobWorkflowService.Services;
@@ -38,8 +39,8 @@ public class OrderCancellationHandler : BackgroundService
             await _messageConsumer.StartConsumingAsync<OrderCancelledEvent>(
                 queueName: "job-workflow-service-cancellations",
                 handler: HandleOrderCancelledAsync,
-                exchangeName: "order-events",
-                routingKey: "order.cancelled",
+                exchangeName: ExchangeNames.OrderEvents,
+                routingKey: RoutingKeys.Order.Cancelled,
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation("Successfully subscribed to order cancelled events");
@@ -102,8 +103,8 @@ public class OrderCancellationHandler : BackgroundService
                     PreviousStatus = "Assigned",
                     NewStatus = "Returning"
                 },
-                exchange: "truck-events",
-                routingKey: "truck.status.changed");
+                exchange: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.StatusChanged);
 
             // Publish return to plant command
             await _messagePublisher.PublishAsync(
@@ -111,7 +112,7 @@ public class OrderCancellationHandler : BackgroundService
                 {
                     TruckId = truckId.Value.ToString()
                 },
-                exchange: "truck-commands",
+                exchange: ExchangeNames.TruckCommands,
                 routingKey: $"truck.{truckId}.returntoplant");
 
             _logger.LogInformation(

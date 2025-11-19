@@ -7,7 +7,7 @@ metadata:
     app: concretedelivery-web
     component: web
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: concretedelivery-web
@@ -99,3 +99,7 @@ spec:
     name: http
   selector:
     app: concretedelivery-web
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800

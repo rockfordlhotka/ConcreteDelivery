@@ -194,13 +194,13 @@ public class TruckDashboardService : IDisposable
                 await Task.CompletedTask;
             });
 
-        // Subscribe to returned events
-        await SubscribeToEventAsync<ReturnedToPlantEvent>(
+        // Subscribe to wash completed events
+        await SubscribeToEventAsync<WashCompletedEvent>(
             connection,
             loggerFactory,
-            "dashboard.truck.returned",
+            "dashboard.truck.wash.completed",
             ExchangeNames.TruckEvents,
-            RoutingKeys.Truck.ReturnedToPlant,
+            RoutingKeys.Truck.WashCompleted,
             async (message) =>
             {
                 if (int.TryParse(message.TruckId, out var truckId))

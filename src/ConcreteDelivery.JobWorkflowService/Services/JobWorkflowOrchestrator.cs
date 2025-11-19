@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 
 namespace ConcreteDelivery.JobWorkflowService.Services;
@@ -41,8 +42,8 @@ public class JobWorkflowOrchestrator : BackgroundService
             await _messageConsumer.StartConsumingAsync<OrderCreatedEvent>(
                 queueName: "job-workflow-service-orders",
                 handler: HandleOrderCreatedAsync,
-                exchangeName: "order-events",
-                routingKey: "order.created",
+                exchangeName: ExchangeNames.OrderEvents,
+                routingKey: RoutingKeys.Order.Created,
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation("Successfully subscribed to order created events");
@@ -116,8 +117,8 @@ public class JobWorkflowOrchestrator : BackgroundService
                         TruckId = truckId,
                         TruckDriverName = driverName
                     },
-                    exchange: "order-events",
-                    routingKey: "order.truck.assigned");
+                    exchange: ExchangeNames.OrderEvents,
+                    routingKey: RoutingKeys.Order.TruckAssigned);
 
                 assignedCount++;
             }
@@ -179,8 +180,8 @@ public class JobWorkflowOrchestrator : BackgroundService
                     TruckId = truckId,
                     TruckDriverName = driverName
                 },
-                exchange: "order-events",
-                routingKey: "order.truck.assigned");
+                exchange: ExchangeNames.OrderEvents,
+                routingKey: RoutingKeys.Order.TruckAssigned);
 
             _logger.LogInformation(
                 "Successfully assigned truck {TruckId} to order {OrderId}",

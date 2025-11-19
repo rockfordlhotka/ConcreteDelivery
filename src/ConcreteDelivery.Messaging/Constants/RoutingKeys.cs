@@ -26,8 +26,11 @@ public static class RoutingKeys
     public static class Order
     {
         public const string Created = "order.created";
+        public const string Updated = "order.updated";
+        public const string Cancelled = "order.cancelled";
         public const string StatusChanged = "order.status.changed";
         public const string InTransit = "order.status.intransit";
         public const string Delivered = "order.delivered";
+        public const string TruckAssigned = "order.truck.assigned";
     }
 }

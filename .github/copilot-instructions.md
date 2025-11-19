@@ -32,6 +32,8 @@ This project uses the following technologies and should follow their best practi
 ## Deployment Considerations
 
 - Generate Kubernetes manifests compatible with K3s
+- All pods and services are deployed in the `concretedelivery` namespace in Kubernetes
 - Include resource limits and requests in deployment specs
 - Configure services for horizontal scaling where appropriate
 - Use ConfigMaps and Secrets for configuration management
+- **IMPORTANT**: After rebuilding any service Docker image, it MUST be pushed to Docker Hub before restarting the Kubernetes deployment. The deployment pulls images from Docker Hub, not from local Docker storage. Use `docker push rockylhotka/<service-name>:latest` after each build.

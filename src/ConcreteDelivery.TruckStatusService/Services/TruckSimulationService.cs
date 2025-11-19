@@ -59,8 +59,8 @@ public class TruckSimulationService : BackgroundService
             await _messageConsumer.StartConsumingAsync<TruckAssignedToOrderEvent>(
                 queueName: "truck-status-service-assignments",
                 handler: HandleTruckAssignmentAsync,
-                exchangeName: "order-events",
-                routingKey: "order.truck.assigned",
+                exchangeName: ExchangeNames.OrderEvents,
+                routingKey: RoutingKeys.Order.TruckAssigned,
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation("Successfully subscribed to truck assignment events");
@@ -362,6 +362,17 @@ public class TruckSimulationService : BackgroundService
         await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Delivering, orderId, cancellationToken);
         await repository.UpdateOrderStatusAsync(orderId, TruckStatus.Delivering, cancellationToken);
 
+        // Publish status changed event
+        await _messagePublisher.PublishAsync(
+            new TruckStatusChangedEvent
+            {
+                TruckId = truckId.ToString(),
+                PreviousStatus = TruckStatus.EnRoute,
+                NewStatus = TruckStatus.Delivering
+            },
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.StatusChanged);
+
         // Publish pouring started event
         await _messagePublisher.PublishAsync(
             new PouringStartedEvent
@@ -440,6 +451,17 @@ public class TruckSimulationService : BackgroundService
         // Update status to Washing
         await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Washing, orderId, cancellationToken);
 
+        // Publish status changed event
+        await _messagePublisher.PublishAsync(
+            new TruckStatusChangedEvent
+            {
+                TruckId = truckId.ToString(),
+                PreviousStatus = TruckStatus.Returning,
+                NewStatus = TruckStatus.Washing
+            },
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.StatusChanged);
+
         // Publish wash started event
         await _messagePublisher.PublishAsync(
             new WashStartedEvent
@@ -475,6 +497,17 @@ public class TruckSimulationService : BackgroundService
         // Update status to Available (no order)
         await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Available, null, cancellationToken);
         await repository.UpdateOrderStatusAsync(orderId, "Delivered", cancellationToken);
+
+        // Publish status changed event
+        await _messagePublisher.PublishAsync(
+            new TruckStatusChangedEvent
+            {
+                TruckId = truckId.ToString(),
+                PreviousStatus = TruckStatus.Washing,
+                NewStatus = TruckStatus.Available
+            },
+            exchange: ExchangeNames.TruckEvents,
+            routingKey: RoutingKeys.Truck.StatusChanged);
 
         // Publish truck idle event
         await _messagePublisher.PublishAsync(

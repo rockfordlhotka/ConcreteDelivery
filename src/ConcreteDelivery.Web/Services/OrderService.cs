@@ -105,7 +105,7 @@ public class OrderService
             Status = order.Status
         };
 
-        await _messagePublisher.PublishAsync(orderCreatedEvent, "concrete.events", $"order.{order.Id}.created");
+        await _messagePublisher.PublishAsync(orderCreatedEvent, ExchangeNames.OrderEvents, RoutingKeys.Order.Created);
         
         _logger.LogInformation("Order {OrderId} created for customer {CustomerName}", order.Id, order.CustomerName);
 
@@ -162,7 +162,7 @@ public class OrderService
             Status = order.Status
         };
 
-        await _messagePublisher.PublishAsync(orderUpdatedEvent, "concrete.events", $"order.{order.Id}.updated");
+        await _messagePublisher.PublishAsync(orderUpdatedEvent, ExchangeNames.OrderEvents, RoutingKeys.Order.Updated);
         
         _logger.LogInformation("Order {OrderId} updated", order.Id);
 
@@ -210,7 +210,7 @@ public class OrderService
             Reason = reason
         };
 
-        await _messagePublisher.PublishAsync(orderCancelledEvent, "concrete.events", $"order.{order.Id}.cancelled");
+        await _messagePublisher.PublishAsync(orderCancelledEvent, ExchangeNames.OrderEvents, RoutingKeys.Order.Cancelled);
 
         // Also publish status changed event
         var statusChangedEvent = new OrderStatusChangedEvent
@@ -220,7 +220,7 @@ public class OrderService
             NewStatus = "Cancelled"
         };
 
-        await _messagePublisher.PublishAsync(statusChangedEvent, "concrete.events", $"order.{order.Id}.status.changed");
+        await _messagePublisher.PublishAsync(statusChangedEvent, ExchangeNames.OrderEvents, RoutingKeys.Order.StatusChanged);
         
         _logger.LogInformation("Order {OrderId} cancelled. Reason: {Reason}", order.Id, reason);
 
@@ -260,7 +260,7 @@ public class OrderService
             TruckDriverName = truck.DriverName
         };
 
-        await _messagePublisher.PublishAsync(truckAssignedEvent, "concrete.events", $"order.{order.Id}.truck.assigned");
+        await _messagePublisher.PublishAsync(truckAssignedEvent, ExchangeNames.OrderEvents, RoutingKeys.Order.TruckAssigned);
         
         _logger.LogInformation("Truck {TruckId} assigned to order {OrderId}", truckId, orderId);
 
