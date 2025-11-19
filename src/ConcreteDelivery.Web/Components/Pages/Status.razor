@@ -1,0 +1,170 @@
+@page "/status"
+@using ConcreteDelivery.Data
+@using ConcreteDelivery.Messaging
+@using Microsoft.EntityFrameworkCore
+@inject ConcreteDeliveryDbContext DbContext
+@inject IRabbitMqConnection RabbitMqConnection
+
+<PageTitle>System Status</PageTitle>
+
+<h1>System Status</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Infrastructure Health</h5>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <tbody>
+                        <tr>
+                            <td><strong>Database Connection</strong></td>
+                            <td>
+                                @if (databaseConnected)
+                                {
+                                    <span class="badge bg-success">✓ Connected</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">✗ Disconnected</span>
+                                    @if (!string.IsNullOrEmpty(databaseError))
+                                    {
+                                        <br /><small class="text-danger">@databaseError</small>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>RabbitMQ Connection</strong></td>
+                            <td>
+                                @if (rabbitMqConnected)
+                                {
+                                    <span class="badge bg-success">✓ Connected</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">✗ Disconnected</span>
+                                    @if (!string.IsNullOrEmpty(rabbitMqError))
+                                    {
+                                        <br /><small class="text-danger">@rabbitMqError</small>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>System Metrics</h5>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <tbody>
+                        <tr>
+                            <td><strong>Total Plants</strong></td>
+                            <td>
+                                @if (databaseConnected)
+                                {
+                                    <span class="badge bg-primary">@plantCount</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Total Trucks</strong></td>
+                            <td>
+                                @if (databaseConnected)
+                                {
+                                    <span class="badge bg-primary">@truckCount</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Total Orders</strong></td>
+                            <td>
+                                @if (databaseConnected)
+                                {
+                                    <span class="badge bg-primary">@orderCount</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <p class="text-muted small">
+            <em>Last updated: @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</em>
+        </p>
+    </div>
+</div>
+
+@code {
+    private bool databaseConnected = false;
+    private string? databaseError = null;
+    private bool rabbitMqConnected = false;
+    private string? rabbitMqError = null;
+    private int plantCount = 0;
+    private int truckCount = 0;
+    private int orderCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Test database connection
+        try
+        {
+            // Test database connection and get counts
+            await DbContext.Database.OpenConnectionAsync();
+            databaseConnected = true;
+
+            plantCount = await DbContext.Plants.CountAsync();
+            truckCount = await DbContext.Trucks.CountAsync();
+            orderCount = await DbContext.Orders.CountAsync();
+
+            await DbContext.Database.CloseConnectionAsync();
+        }
+        catch (Exception ex)
+        {
+            databaseConnected = false;
+            databaseError = ex.Message;
+        }
+
+        // Test RabbitMQ connection
+        try
+        {
+            var connection = RabbitMqConnection.GetConnection();
+            rabbitMqConnected = RabbitMqConnection.IsConnected;
+            
+            if (!rabbitMqConnected)
+            {
+                rabbitMqError = "Connection failed to establish";
+            }
+        }
+        catch (Exception ex)
+        {
+            rabbitMqConnected = false;
+            rabbitMqError = ex.Message;
+        }
+    }
+}

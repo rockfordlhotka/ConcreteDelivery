@@ -5,6 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>216d946e-4c2d-4f5f-85a7-dc5e6e7b32b2</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConcreteDelivery.Data\ConcreteDelivery.Data.csproj" />
+    <ProjectReference Include="..\ConcreteDelivery.Messaging\ConcreteDelivery.Messaging.csproj" />
+  </ItemGroup>
 
 </Project>

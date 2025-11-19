@@ -1,6 +1,16 @@
+using ConcreteDelivery.Data;
+using ConcreteDelivery.Messaging;
 using ConcreteDelivery.Web.Components;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add database context
+builder.Services.AddDbContext<ConcreteDeliveryDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Add RabbitMQ messaging
+builder.Services.AddRabbitMqMessaging(builder.Configuration);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
