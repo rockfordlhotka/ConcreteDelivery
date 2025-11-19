@@ -1,6 +1,7 @@
 using ConcreteDelivery.Data;
 using ConcreteDelivery.Messaging;
 using ConcreteDelivery.Web.Components;
+using ConcreteDelivery.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,9 @@ builder.Services.AddDbContext<ConcreteDeliveryDbContext>(options =>
 
 // Add RabbitMQ messaging
 builder.Services.AddRabbitMqMessaging(builder.Configuration);
+
+// Add dashboard service as singleton for real-time updates
+builder.Services.AddSingleton<TruckDashboardService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

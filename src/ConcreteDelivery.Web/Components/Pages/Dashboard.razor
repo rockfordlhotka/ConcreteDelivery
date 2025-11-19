@@ -1,0 +1,148 @@
+@page "/dashboard"
+@using ConcreteDelivery.Web.Services
+@using Microsoft.AspNetCore.Components.Web
+@inject TruckDashboardService DashboardService
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Truck Dashboard</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-4">🚛 Truck Dashboard</h1>
+            <p class="lead">Real-time truck status monitoring</p>
+        </div>
+    </div>
+
+    @if (!_isLoaded)
+    {
+        <div class="row">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading truck data...</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-grid">
+            <!-- Header Row -->
+            <div class="dashboard-header">
+                <div class="status-column header-cell">Truck / Driver</div>
+                <div class="status-column header-cell">Available</div>
+                <div class="status-column header-cell">Loading</div>
+                <div class="status-column header-cell">En Route</div>
+                <div class="status-column header-cell">At Job Site</div>
+                <div class="status-column header-cell">Delivering</div>
+                <div class="status-column header-cell">Returning</div>
+                <div class="status-column header-cell">Washing</div>
+            </div>
+
+            <!-- Truck Rows -->
+            @foreach (var truck in _trucks)
+            {
+                <div class="dashboard-row">
+                    <div class="truck-info">
+                        <div class="truck-number">Truck #@truck.TruckId</div>
+                        <div class="driver-name">@truck.DriverName</div>
+                        <div class="last-updated">
+                            <small class="text-muted">Updated: @truck.LastUpdated.ToLocalTime().ToString("HH:mm:ss")</small>
+                        </div>
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "Available")
+                        {
+                            <div class="truck-icon available">�</div>
+                        }
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "Loading")
+                        {
+                            <div class="truck-icon loading">🚚</div>
+                        }
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "EnRoute")
+                        {
+                            <div class="truck-icon enroute">🚚</div>
+                        }
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "AtJobSite")
+                        {
+                            <div class="truck-icon atjobsite">🚚</div>
+                        }
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "Delivering")
+                        {
+                            <div class="truck-icon delivering">🚚</div>
+                        }
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "Returning")
+                        {
+                            <div class="truck-icon returning">🚚</div>
+                        }
+                    </div>
+                    
+                    <div class="status-column">
+                        @if (truck.Status == "Washing")
+                        {
+                            <div class="truck-icon washing">🚚</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <strong>ℹ️ Real-time Updates:</strong> This dashboard automatically updates when trucks change status via RabbitMQ messages.
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<TruckStatusInfo> _trucks = new();
+    private bool _isLoaded = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize the dashboard service
+        await DashboardService.InitializeAsync();
+        
+        // Load initial truck data
+        _trucks = DashboardService.GetAllTruckStatuses().ToList();
+        _isLoaded = true;
+
+        // Subscribe to status change events
+        DashboardService.StatusChanged += OnStatusChanged;
+    }
+
+    private async void OnStatusChanged(object? sender, EventArgs e)
+    {
+        // Update truck list
+        _trucks = DashboardService.GetAllTruckStatuses().ToList();
+        
+        // Trigger UI update on the Blazor thread
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        DashboardService.StatusChanged -= OnStatusChanged;
+    }
+}

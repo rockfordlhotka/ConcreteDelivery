@@ -1,0 +1,254 @@
+.dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.dashboard-header {
+    display: grid;
+    grid-template-columns: 200px repeat(7, 1fr);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: bold;
+    border-bottom: 2px solid #5568d3;
+}
+
+.header-cell {
+    padding: 1rem;
+    text-align: center;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.header-cell:last-child {
+    border-right: none;
+}
+
+.dashboard-row {
+    display: grid;
+    grid-template-columns: 200px repeat(7, 1fr);
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.2s ease;
+}
+
+.dashboard-row:hover {
+    background-color: #f8f9fa;
+}
+
+.dashboard-row:last-child {
+    border-bottom: none;
+}
+
+.truck-info {
+    padding: 1rem;
+    border-right: 2px solid #dee2e6;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.truck-number {
+    font-weight: bold;
+    color: #495057;
+    font-size: 1.1rem;
+}
+
+.driver-name {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.last-updated {
+    margin-top: 0.25rem;
+}
+
+.status-column {
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid #e9ecef;
+    min-height: 80px;
+}
+
+.status-column:last-child {
+    border-right: none;
+}
+
+.truck-icon {
+    font-size: 2.5rem;
+    animation: fadeIn 0.3s ease-in;
+    transition: transform 0.2s ease;
+}
+
+.truck-icon:hover {
+    transform: scale(1.2);
+}
+
+/* Status-specific animations and colors */
+.truck-icon.available {
+    filter: hue-rotate(0deg);
+    animation: pulse 2s infinite;
+}
+
+.truck-icon.loading {
+    filter: hue-rotate(60deg);
+    animation: bounce 1s infinite;
+}
+
+.truck-icon.enroute {
+    filter: hue-rotate(180deg);
+    animation: moveRight 2s infinite;
+}
+
+.truck-icon.atjobsite {
+    filter: hue-rotate(270deg);
+    animation: shake 0.5s infinite;
+}
+
+.truck-icon.delivering {
+    filter: hue-rotate(30deg);
+    animation: tilt 1s infinite;
+}
+
+.truck-icon.returning {
+    filter: hue-rotate(120deg);
+    animation: moveLeft 2s infinite;
+}
+
+.truck-icon.washing {
+    filter: hue-rotate(200deg);
+    animation: spin 2s linear infinite;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes moveRight {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    50% {
+        transform: translateX(10px);
+    }
+}
+
+@keyframes moveLeft {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    50% {
+        transform: translateX(-10px);
+    }
+}
+
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-3px);
+    }
+    75% {
+        transform: translateX(3px);
+    }
+}
+
+@keyframes tilt {
+    0%, 100% {
+        transform: rotate(0deg);
+    }
+    50% {
+        transform: rotate(-5deg);
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+    .dashboard-header,
+    .dashboard-row {
+        grid-template-columns: 180px repeat(7, 1fr);
+    }
+    
+    .truck-icon {
+        font-size: 2rem;
+    }
+}
+
+@media (max-width: 992px) {
+    .dashboard-header,
+    .dashboard-row {
+        grid-template-columns: 160px repeat(7, 1fr);
+    }
+    
+    .truck-icon {
+        font-size: 1.75rem;
+    }
+    
+    .header-cell {
+        font-size: 0.85rem;
+        padding: 0.75rem 0.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-header,
+    .dashboard-row {
+        grid-template-columns: 140px repeat(7, 1fr);
+    }
+    
+    .truck-icon {
+        font-size: 1.5rem;
+    }
+    
+    .header-cell {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.25rem;
+    }
+    
+    .truck-info {
+        padding: 0.75rem;
+    }
+}
