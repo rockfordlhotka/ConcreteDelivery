@@ -15,6 +15,13 @@
                 <p class="lead">Manage concrete delivery orders</p>
             </div>
             <div>
+                <button class="btn btn-success btn-lg me-2" @onclick="CreateRandomOrders" disabled="@_isCreatingRandom">
+                    @if (_isCreatingRandom)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    <i class="bi bi-shuffle"></i> Create 5 Demo Orders
+                </button>
                 <button class="btn btn-primary btn-lg" @onclick="NavigateToNewOrder">
                     <i class="bi bi-plus-circle"></i> New Order
                 </button>
@@ -184,6 +191,7 @@
 @code {
     private List<Order> _orders = new();
     private bool _isLoaded = false;
+    private bool _isCreatingRandom = false;
     private Order? _orderToCancel = null;
     private string _cancellationReason = "Customer request";
     private bool _isCancelling = false;
@@ -199,6 +207,20 @@
         _isLoaded = false;
         _orders = await OrderService.GetAllOrdersAsync();
         _isLoaded = true;
+    }
+
+    private async Task CreateRandomOrders()
+    {
+        _isCreatingRandom = true;
+        try
+        {
+            await OrderService.CreateRandomOrdersAsync(5);
+            await LoadOrdersAsync();
+        }
+        finally
+        {
+            _isCreatingRandom = false;
+        }
     }
 
     private void NavigateToNewOrder()

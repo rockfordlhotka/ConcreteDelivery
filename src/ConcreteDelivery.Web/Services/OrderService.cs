@@ -266,4 +266,88 @@ public class OrderService
 
         return true;
     }
+
+    /// <summary>
+    /// Create multiple randomized orders for demo purposes
+    /// </summary>
+    public async Task<List<Order>> CreateRandomOrdersAsync(int count = 5)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        
+        var plants = await context.Plants.ToListAsync();
+        if (plants.Count == 0)
+        {
+            _logger.LogWarning("No plants found - cannot create random orders");
+            return new List<Order>();
+        }
+
+        var random = new Random();
+        var createdOrders = new List<Order>();
+        
+        var customerNames = new[]
+        {
+            "ABC Construction Co.",
+            "Smith Building Services",
+            "Johnson Contractors",
+            "Williams Development",
+            "Brown Builders Inc.",
+            "Davis Construction Group",
+            "Miller & Sons Contractors",
+            "Wilson Building Company",
+            "Moore Construction LLC",
+            "Taylor Building Services",
+            "Anderson Contractors",
+            "Thomas Development Corp.",
+            "Jackson Building Co.",
+            "White Construction Inc.",
+            "Harris Builders Group",
+            "Martin Development LLC",
+            "Thompson Contractors",
+            "Garcia Construction",
+            "Martinez Building Services",
+            "Robinson Development Co."
+        };
+
+        for (int i = 0; i < count; i++)
+        {
+            var customerName = customerNames[random.Next(customerNames.Length)];
+            var distanceMiles = random.Next(5, 50); // 5-50 miles
+            var plantId = plants[random.Next(plants.Count)].Id;
+
+            var order = new Order
+            {
+                CustomerName = customerName,
+                DistanceMiles = distanceMiles,
+                PlantId = plantId,
+                Status = "Pending",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            context.Orders.Add(order);
+            await context.SaveChangesAsync();
+
+            // Reload with navigation properties
+            await context.Entry(order).Reference(o => o.Plant).LoadAsync();
+
+            // Publish event
+            var orderCreatedEvent = new OrderCreatedEvent
+            {
+                OrderId = order.Id,
+                CustomerName = order.CustomerName,
+                DistanceMiles = order.DistanceMiles,
+                PlantId = order.PlantId,
+                Status = order.Status
+            };
+
+            await _messagePublisher.PublishAsync(orderCreatedEvent, ExchangeNames.OrderEvents, RoutingKeys.Order.Created);
+            
+            createdOrders.Add(order);
+
+            _logger.LogInformation("Random order {OrderId} created for customer {CustomerName}", order.Id, order.CustomerName);
+        }
+
+        _logger.LogInformation("Created {Count} random orders", count);
+        return createdOrders;
+    }
 }

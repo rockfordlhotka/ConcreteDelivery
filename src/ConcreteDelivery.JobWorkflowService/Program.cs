@@ -42,6 +42,7 @@ builder.Services.AddScoped<JobWorkflowRepository>();
 
 // Add background services
 builder.Services.AddHostedService<JobWorkflowOrchestrator>();
+builder.Services.AddHostedService<TruckAvailabilityHandler>();
 builder.Services.AddHostedService<OrderCancellationHandler>();
 builder.Services.AddHostedService<OrderCompletionHandler>();
 

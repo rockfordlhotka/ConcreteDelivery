@@ -164,4 +164,15 @@ public class JobWorkflowRepository
         
         return order;
     }
+
+    /// <summary>
+    /// Get truck details by ID
+    /// </summary>
+    public async Task<Truck?> GetTruckDetailsAsync(
+        int truckId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Trucks.FindAsync([truckId], cancellationToken);
+    }
 }
