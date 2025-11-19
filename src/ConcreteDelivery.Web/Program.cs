@@ -3,8 +3,35 @@ using ConcreteDelivery.Messaging;
 using ConcreteDelivery.Web.Components;
 using ConcreteDelivery.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add OpenTelemetry
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("ConcreteDelivery.Web"))
+    .WithTracing(tracing => tracing
+        .AddSource("ConcreteDelivery.Web")
+        .AddAspNetCoreInstrumentation()
+        .AddEntityFrameworkCoreInstrumentation()
+        .AddConsoleExporter())
+    .WithMetrics(metrics => metrics
+        .AddMeter("ConcreteDelivery.Web")
+        .AddAspNetCoreInstrumentation()
+        .AddConsoleExporter());
+
+// Configure logging with OpenTelemetry
+builder.Logging.ClearProviders();
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+    logging.AddConsoleExporter();
+});
+builder.Logging.AddConsole();
 
 // Add database context factory for concurrent access
 builder.Services.AddDbContextFactory<ConcreteDeliveryDbContext>(options =>

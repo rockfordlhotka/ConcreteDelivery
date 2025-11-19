@@ -287,8 +287,10 @@ public class TruckSimulationService : BackgroundService
             new MaterialsLoadedEvent
             {
                 TruckId = truckId.ToString(),
-                MaterialType = "Concrete",
-                Quantity = 10 // cubic yards
+                Materials = new Dictionary<string, decimal>
+                {
+                    { "Concrete", 10 } // cubic yards
+                }
             },
             exchange: ExchangeNames.TruckEvents,
             routingKey: RoutingKeys.Truck.MaterialsLoaded);

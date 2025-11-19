@@ -68,7 +68,7 @@ public class OrderService
         await using var context = await _contextFactory.CreateDbContextAsync();
         return await context.Trucks
             .Include(t => t.CurrentStatus)
-            .Where(t => t.CurrentStatus != null && t.CurrentStatus.Status == TruckStatus.Available)
+            .Where(t => t.CurrentStatus != null && t.CurrentStatus.Status == Messaging.Constants.TruckStatus.Available)
             .ToListAsync();
     }
 
