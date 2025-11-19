@@ -52,6 +52,9 @@ public class TruckSimulationService : BackgroundService
 
         try
         {
+            // Recover any trucks stuck in intermediate states
+            await RecoverStuckTrucksAsync(stoppingToken);
+
             // Process any trucks that are already assigned to orders on startup
             await ProcessAssignedTrucksAsync(stoppingToken);
 
@@ -79,6 +82,199 @@ public class TruckSimulationService : BackgroundService
         {
             _logger.LogError(ex, "Fatal error in Truck Status Service");
             throw;
+        }
+    }
+
+    private async Task RecoverStuckTrucksAsync(CancellationToken cancellationToken)
+    {
+        using var activity = _activitySource.StartActivity("RecoverStuckTrucks");
+        
+        try
+        {
+            _logger.LogInformation("Checking for trucks stuck in intermediate states on startup...");
+
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<TruckStatusRepository>();
+
+            var stuckTrucks = await repository.GetTrucksInIntermediateStatesAsync(cancellationToken);
+
+            if (stuckTrucks.Count == 0)
+            {
+                _logger.LogInformation("No stuck trucks found");
+                return;
+            }
+
+            _logger.LogWarning(
+                "Found {Count} truck(s) stuck in intermediate states - recovering them",
+                stuckTrucks.Count);
+
+            foreach (var (truckId, orderId, status, driverName) in stuckTrucks)
+            {
+                _logger.LogWarning(
+                    "Recovering truck {TruckId} (driver: {DriverName}) stuck in {Status} state (order: {OrderId})",
+                    truckId, driverName, status, orderId);
+
+                if (orderId.HasValue)
+                {
+                    // Truck has an order - resume workflow from current state
+                    await ResumeWorkflowFromStateAsync(truckId, orderId.Value, status, cancellationToken);
+                }
+                else
+                {
+                    // Truck has no order but is in intermediate state - force to Available
+                    _logger.LogWarning(
+                        "Truck {TruckId} is in {Status} state but has no order - forcing to Available",
+                        truckId, status);
+                    
+                    await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Available, null, cancellationToken);
+                    
+                    await _messagePublisher.PublishAsync(
+                        new TruckStatusChangedEvent
+                        {
+                            TruckId = truckId.ToString(),
+                            PreviousStatus = status,
+                            NewStatus = TruckStatus.Available
+                        },
+                        exchange: ExchangeNames.TruckEvents,
+                        routingKey: RoutingKeys.Truck.StatusChanged);
+                }
+            }
+
+            _logger.LogInformation(
+                "Recovery complete - processed {Count} stuck truck(s)",
+                stuckTrucks.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recovering stuck trucks on startup");
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // Don't throw - allow service to continue even if recovery fails
+        }
+    }
+
+    private async Task ResumeWorkflowFromStateAsync(
+        int truckId,
+        int orderId,
+        string currentState,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "Resuming workflow for truck {TruckId} from {CurrentState}",
+            truckId, currentState);
+
+        // Create a cancellation token for this specific truck simulation
+        var truckCts = new CancellationTokenSource();
+        _activeTrucks[truckId] = truckCts;
+
+        // Start the simulation in a background task, picking up from current state
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ContinueWorkflowFromStateAsync(truckId, orderId, currentState, truckCts.Token);
+            }
+            finally
+            {
+                _activeTrucks.TryRemove(truckId, out _);
+                truckCts.Dispose();
+            }
+        }, truckCts.Token);
+    }
+
+    private async Task ContinueWorkflowFromStateAsync(
+        int truckId,
+        int orderId,
+        string currentState,
+        CancellationToken cancellationToken)
+    {
+        using var activity = _activitySource.StartActivity("ContinueWorkflowFromState");
+        activity?.SetTag("truck.id", truckId);
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("resume.state", currentState);
+
+        using var scope = _serviceProvider.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<TruckStatusRepository>();
+
+        try
+        {
+            // Get order details to determine travel time
+            var order = await repository.GetOrderForTruckAsync(truckId, cancellationToken);
+            if (order == null)
+            {
+                _logger.LogWarning("No order found for truck {TruckId} - cannot resume workflow", truckId);
+                return;
+            }
+
+            var travelTimeToSite = order.DistanceMiles * SecondsPerMile;
+            var travelTimeToYard = order.DistanceMiles * SecondsPerMile;
+
+            _logger.LogInformation(
+                "Resuming workflow for truck {TruckId} from {CurrentState}",
+                truckId, currentState);
+
+            // Resume from the appropriate state
+            // For simplicity in demo, we'll fast-forward to the next logical state
+            switch (currentState)
+            {
+                case TruckStatus.Loading:
+                    // Skip to travel phase
+                    await SimulateTravelToSiteAsync(truckId, orderId, travelTimeToSite, repository, cancellationToken);
+                    await SimulateDeliveryAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    break;
+
+                case TruckStatus.EnRoute:
+                    // Skip to delivery
+                    await SimulateDeliveryAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    break;
+
+                case TruckStatus.AtJobSite:
+                case TruckStatus.Delivering:
+                    // Skip to return
+                    await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    break;
+
+                case TruckStatus.Returning:
+                    // Just do washing
+                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    break;
+
+                case TruckStatus.Washing:
+                    // Almost done - just a few more seconds
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                    await _messagePublisher.PublishAsync(
+                        new WashCompletedEvent
+                        {
+                            TruckId = truckId.ToString()
+                        },
+                        exchange: ExchangeNames.TruckEvents,
+                        routingKey: RoutingKeys.Truck.WashCompleted);
+                    break;
+            }
+
+            // Complete the workflow
+            await CompleteWorkflowAsync(truckId, orderId, repository, cancellationToken);
+
+            _logger.LogInformation(
+                "Completed recovered workflow for truck {TruckId}",
+                truckId);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation(
+                "Recovered workflow cancelled for truck {TruckId}",
+                truckId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error in recovered workflow for truck {TruckId}",
+                truckId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
         }
     }
 

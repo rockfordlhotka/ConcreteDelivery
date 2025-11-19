@@ -195,4 +195,46 @@ public class TruckStatusRepository
             return new List<(int, int, string)>();
         }
     }
+
+    /// <summary>
+    /// Gets all trucks that are stuck in intermediate states (not Available or Assigned)
+    /// </summary>
+    public async Task<List<(int TruckId, int? OrderId, string Status, string DriverName)>> GetTrucksInIntermediateStatesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            
+            var intermediateStatuses = new[]
+            {
+                "Loading",
+                "EnRoute",
+                "AtJobSite",
+                "Delivering",
+                "Returning",
+                "Washing"
+            };
+
+            return await context.TruckStatuses
+                .Where(ts => intermediateStatuses.Contains(ts.Status))
+                .Include(ts => ts.Truck)
+                .Select(ts => new
+                {
+                    ts.TruckId,
+                    ts.CurrentOrderId,
+                    ts.Status,
+                    ts.Truck.DriverName
+                })
+                .ToListAsync(cancellationToken)
+                .ContinueWith(task => task.Result
+                    .Select(x => (x.TruckId, x.CurrentOrderId, x.Status, x.DriverName))
+                    .ToList(), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting trucks in intermediate states");
+            return new List<(int, int?, string, string)>();
+        }
+    }
 }
