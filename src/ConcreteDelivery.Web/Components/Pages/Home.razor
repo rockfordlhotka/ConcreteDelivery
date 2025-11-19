@@ -1,0 +1,76 @@
+﻿@page "/"
+
+<PageTitle>Far North Concrete - Home</PageTitle>
+
+<div class="hero-section">
+    <h1>Welcome to Far North Concrete</h1>
+    <p class="lead">Your trusted partner for quality concrete delivery services</p>
+</div>
+
+<div class="info-cards">
+    <div class="card">
+        <h3>🚚 Reliable Delivery</h3>
+        <p>On-time concrete delivery you can count on</p>
+    </div>
+    <div class="card">
+        <h3>💪 Quality Products</h3>
+        <p>Premium concrete mixes for every project</p>
+    </div>
+    <div class="card">
+        <h3>📱 Easy Ordering</h3>
+        <p>Streamlined order management system</p>
+    </div>
+</div>
+
+<style>
+    .hero-section {
+        text-align: center;
+        padding: 3rem 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+    }
+
+    .hero-section h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .hero-section .lead {
+        font-size: 1.25rem;
+        opacity: 0.95;
+    }
+
+    .info-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+
+    .info-cards .card {
+        padding: 2rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .info-cards .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .info-cards h3 {
+        margin-top: 0;
+        color: #667eea;
+        font-size: 1.5rem;
+    }
+
+    .info-cards p {
+        color: #666;
+        margin-bottom: 0;
+    }
+</style>
