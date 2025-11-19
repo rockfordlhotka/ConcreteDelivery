@@ -40,20 +40,24 @@ The dispatcher dashboard (Blazor) tracks trucks through these states and issues 
 
 ### Services
 
-1. **TruckStatusService (HTTP)**
-   - Provides current status of trucks.
-   - Supports scaling replicas → demo load balancing and failover.
-   - Blazor UI polls or subscribes for updates.
+1. **Inventory Service (Background Worker)**
+   - Listens for truck status changes via RabbitMQ.
+   - Deducts materials from plant inventory when trucks start loading.
+   - Uses PostgreSQL for inventory persistence.
+   - Demonstrates event-driven architecture.
 
-2. **JobWorkflowService (RabbitMQ)**
-   - Consumes messages like `StartPouring`, `WashTruck`, `ReturnToPlant`.
+2. **Truck Status Service (Background Worker)**
+   - Simulates truck operations with compressed time for demo purposes.
+   - Listens for truck assignments and simulates complete workflow.
+   - Updates truck and order status in PostgreSQL.
+   - Publishes status events at each phase via RabbitMQ.
+   - Total cycle time: ~60-100 seconds depending on distance.
+
+3. **Job Workflow Service (Planned)**
+   - Assigns trucks to orders based on availability.
+   - Orchestrates the flow of work through the system.
+   - Publishes truck assignment events.
    - Demonstrates async orchestration and resilience.
-   - Worker pods can scale up/down to handle backlog.
-
-3. **InventoryService (HTTP + PostgreSQL)**
-   - Tracks materials (sand, rock, cement, water).
-   - Updates inventory when trucks load materials.
-   - Persists data in PostgreSQL.
 
 ### Database
 
@@ -64,10 +68,29 @@ The dispatcher dashboard (Blazor) tracks trucks through these states and issues 
 
 ## Kubernetes Demo Highlights
 
-- **Replica Failover**: Scale `TruckStatusService` to multiple pods, kill one, show Blazor UI still works.
-- **Async Messaging**: Queue multiple jobs in RabbitMQ, then scale worker pods to drain backlog.
-- **Rolling Updates**: Deploy new version of `JobWorkflowService` with updated status messages.
-- **Persistence**: PostgreSQL ensures history is intact even if services restart.
+- **Event-Driven Architecture**: Services communicate via RabbitMQ for loose coupling and resilience.
+- **Background Workers**: Inventory and Truck Status services run as background workers without HTTP endpoints.
+- **Async Workflow**: Watch orders progress through the system in real-time with compressed timing.
+- **Persistence**: PostgreSQL ensures truck status, orders, and inventory are maintained.
+- **Service Isolation**: Each service can be deployed, scaled, and updated independently.
+
+---
+
+## Current Implementation Status
+
+✅ **Completed**:
+
+- Blazor Web UI with truck dashboard
+- PostgreSQL database with EF Core
+- RabbitMQ messaging infrastructure
+- Inventory Service (background worker)
+- Truck Status Service (background worker with simulation)
+- Docker containers for all services
+- Kubernetes deployment manifests
+
+🚧 **In Progress**:
+
+- Job Workflow Service (assigns trucks to orders)
 
 ---
 

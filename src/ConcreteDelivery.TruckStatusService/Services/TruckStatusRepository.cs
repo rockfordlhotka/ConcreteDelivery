@@ -1,0 +1,167 @@
+using System.Diagnostics;
+using ConcreteDelivery.Data;
+using ConcreteDelivery.Data.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace ConcreteDelivery.TruckStatusService.Services;
+
+/// <summary>
+/// Repository for managing truck and order status in the database
+/// </summary>
+public class TruckStatusRepository
+{
+    private readonly IDbContextFactory<ConcreteDeliveryDbContext> _contextFactory;
+    private readonly ILogger<TruckStatusRepository> _logger;
+    private readonly ActivitySource _activitySource;
+
+    public TruckStatusRepository(
+        IDbContextFactory<ConcreteDeliveryDbContext> contextFactory,
+        ILogger<TruckStatusRepository> logger)
+    {
+        _contextFactory = contextFactory;
+        _logger = logger;
+        _activitySource = new ActivitySource("ConcreteDelivery.TruckStatusService");
+    }
+
+    /// <summary>
+    /// Updates the truck status and associated order
+    /// </summary>
+    public async Task<bool> UpdateTruckStatusAsync(
+        int truckId, 
+        string newStatus, 
+        int? orderId = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("UpdateTruckStatus");
+        activity?.SetTag("truck.id", truckId);
+        activity?.SetTag("status.new", newStatus);
+        activity?.SetTag("order.id", orderId);
+
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            var truckStatus = await context.TruckStatuses
+                .FirstOrDefaultAsync(ts => ts.TruckId == truckId, cancellationToken);
+
+            if (truckStatus == null)
+            {
+                _logger.LogWarning("Truck status not found for truck {TruckId}", truckId);
+                return false;
+            }
+
+            var previousStatus = truckStatus.Status;
+            truckStatus.Status = newStatus;
+            truckStatus.CurrentOrderId = orderId;
+            truckStatus.UpdatedAt = DateTime.UtcNow;
+
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Updated truck {TruckId} status from {PreviousStatus} to {NewStatus}",
+                truckId, previousStatus, newStatus);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating truck status for truck {TruckId}", truckId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Updates the order status
+    /// </summary>
+    public async Task<bool> UpdateOrderStatusAsync(
+        int orderId,
+        string newStatus,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("UpdateOrderStatus");
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("status.new", newStatus);
+
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            var order = await context.Orders
+                .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+
+            if (order == null)
+            {
+                _logger.LogWarning("Order not found with ID {OrderId}", orderId);
+                return false;
+            }
+
+            var previousStatus = order.Status;
+            order.Status = newStatus;
+            order.UpdatedAt = DateTime.UtcNow;
+
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Updated order {OrderId} status from {PreviousStatus} to {NewStatus}",
+                orderId, previousStatus, newStatus);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating order status for order {OrderId}", orderId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the order details for a truck
+    /// </summary>
+    public async Task<Order?> GetOrderForTruckAsync(
+        int truckId,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("GetOrderForTruck");
+        activity?.SetTag("truck.id", truckId);
+
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            var truckStatus = await context.TruckStatuses
+                .Include(ts => ts.CurrentOrder)
+                .FirstOrDefaultAsync(ts => ts.TruckId == truckId, cancellationToken);
+
+            return truckStatus?.CurrentOrder;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting order for truck {TruckId}", truckId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets truck information by ID
+    /// </summary>
+    public async Task<Truck?> GetTruckAsync(
+        int truckId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            return await context.Trucks
+                .Include(t => t.CurrentStatus)
+                .FirstOrDefaultAsync(t => t.Id == truckId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting truck {TruckId}", truckId);
+            return null;
+        }
+    }
+}
