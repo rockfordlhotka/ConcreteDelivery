@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: concretedelivery-web
+  namespace: concretedelivery
+  labels:
+    app: concretedelivery-web
+    component: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: concretedelivery-web
+  template:
+    metadata:
+      labels:
+        app: concretedelivery-web
+        component: web
+    spec:
+      containers:
+      - name: web
+        image: rockfordlhotka/concretedelivery-web:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: https
+          containerPort: 8081
+          protocol: TCP
+        env:
+        # Database connection string from secret
+        - name: ConnectionStrings__DefaultConnection
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-db-secret
+              key: connection-string
+        # RabbitMQ configuration from secret
+        - name: RabbitMq__Server
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-rabbitmq-secret
+              key: host
+        - name: RabbitMq__User
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-rabbitmq-secret
+              key: username
+        - name: RabbitMq__Password
+          valueFrom:
+            secretKeyRef:
+              name: concretedelivery-rabbitmq-secret
+              key: password
+        # ASP.NET Core configuration
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: ASPNETCORE_URLS
+          value: "http://+:8080"
+        - name: ASPNETCORE_HTTP_PORTS
+          value: "8080"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: concretedelivery-web
+  namespace: concretedelivery
+  labels:
+    app: concretedelivery-web
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: concretedelivery-web

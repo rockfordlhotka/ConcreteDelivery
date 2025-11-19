@@ -482,3 +482,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Kubernetes secrets scripts (contain sensitive credentials)
+k8s/create-secrets.sh

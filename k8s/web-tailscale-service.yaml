@@ -1,0 +1,28 @@
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: concretedelivery-web-proxy
+  namespace: concretedelivery
+spec:
+  statefulSet:
+    labels:
+      app: concretedelivery-web-tailscale
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: concretedelivery-web-tailscale
+  namespace: concretedelivery
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: "concretedelivery"
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  ports:
+  - port: 443
+    targetPort: 8080
+    protocol: TCP
+    name: https
+  selector:
+    app: concretedelivery-web
