@@ -23,6 +23,7 @@ Concrete trucks operate in a cycle:
 4. **Pouring Concrete**.
 5. **Washing Truck**.
 6. **Returning to Plant**.
+7. **Idle** at plant.
 
 The dispatcher dashboard (Blazor) tracks trucks through these states and issues commands.
 
