@@ -1,0 +1,303 @@
+@page "/orders/new"
+@page "/orders/edit/{OrderId:int}"
+@using ConcreteDelivery.Data.Entities
+@using ConcreteDelivery.Web.Services
+@inject OrderService OrderService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>@(_isNewOrder ? "New Order" : $"Edit Order #{OrderId}")</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/orders">Orders</a></li>
+                    <li class="breadcrumb-item active">@(_isNewOrder ? "New Order" : $"Edit Order #{OrderId}")</li>
+                </ol>
+            </nav>
+            <h1 class="display-4">@(_isNewOrder ? "📝 New Order" : $"✏️ Edit Order #{OrderId}")</h1>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="row">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">@(_isNewOrder ? "Preparing form..." : "Loading order...")</p>
+            </div>
+        </div>
+    }
+    else if (!_isNewOrder && _order == null)
+    {
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-danger">
+                    <h4>Order Not Found</h4>
+                    <p>The requested order could not be found.</p>
+                    <a href="/orders" class="btn btn-primary">Back to Orders</a>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <div class="col-lg-8 col-xl-6">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <EditForm Model="@_formModel" OnValidSubmit="HandleSubmit">
+                            <DataAnnotationsValidator />
+                            
+                            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                            {
+                                <div class="alert alert-danger alert-dismissible fade show">
+                                    @_errorMessage
+                                    <button type="button" class="btn-close" @onclick="() => _errorMessage = string.Empty"></button>
+                                </div>
+                            }
+
+                            <div class="mb-3">
+                                <label class="form-label">Customer Name <span class="text-danger">*</span></label>
+                                <InputText @bind-Value="_formModel.CustomerName" class="form-control" placeholder="Enter customer name" />
+                                <ValidationMessage For="@(() => _formModel.CustomerName)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Distance (miles) <span class="text-danger">*</span></label>
+                                <InputNumber @bind-Value="_formModel.DistanceMiles" class="form-control" placeholder="Enter distance" />
+                                <ValidationMessage For="@(() => _formModel.DistanceMiles)" />
+                                <small class="form-text text-muted">Distance from plant to delivery location</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Plant</label>
+                                <InputSelect @bind-Value="_formModel.PlantId" class="form-select">
+                                    <option value="">-- Select Plant (Optional) --</option>
+                                    @foreach (var plant in _plants)
+                                    {
+                                        <option value="@plant.Id">@plant.Name</option>
+                                    }
+                                </InputSelect>
+                                <small class="form-text text-muted">Select the plant for this order</small>
+                            </div>
+
+                            @if (!_isNewOrder)
+                            {
+                                <div class="mb-3">
+                                    <label class="form-label">Truck Assignment</label>
+                                    <InputSelect @bind-Value="_formModel.TruckId" class="form-select">
+                                        <option value="">-- No Truck Assigned --</option>
+                                        @foreach (var truck in _trucks)
+                                        {
+                                            <option value="@truck.Id">Truck #@truck.Id - @truck.DriverName</option>
+                                        }
+                                    </InputSelect>
+                                    <small class="form-text text-muted">Assign an available truck to this order</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Status</label>
+                                    <input type="text" class="form-control" value="@_order?.Status" readonly />
+                                    <small class="form-text text-muted">Status is automatically managed</small>
+                                </div>
+                            }
+
+                            <div class="d-flex gap-2 mt-4">
+                                <button type="submit" class="btn btn-primary" disabled="@_isSaving">
+                                    @if (_isSaving)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                    }
+                                    @(_isNewOrder ? "Create Order" : "Update Order")
+                                </button>
+                                <button type="button" class="btn btn-secondary" @onclick="Cancel" disabled="@_isSaving">
+                                    Cancel
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+
+                @if (!_isNewOrder && _order != null)
+                {
+                    <div class="card shadow mt-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Order Information</h5>
+                            <ul class="list-unstyled">
+                                <li><strong>Order ID:</strong> #@_order.Id</li>
+                                <li><strong>Created:</strong> @_order.CreatedAt.ToLocalTime().ToString("MM/dd/yyyy HH:mm:ss")</li>
+                                <li><strong>Last Updated:</strong> @_order.UpdatedAt.ToLocalTime().ToString("MM/dd/yyyy HH:mm:ss")</li>
+                            </ul>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="col-lg-4 col-xl-6">
+                <div class="card shadow bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title">ℹ️ Order Status Guide</h5>
+                        <dl class="mb-0">
+                            <dt><span class="badge bg-warning text-dark">Pending</span></dt>
+                            <dd class="small">Order created, awaiting assignment</dd>
+                            
+                            <dt><span class="badge bg-info text-dark">Assigned</span></dt>
+                            <dd class="small">Truck has been assigned to the order</dd>
+                            
+                            <dt><span class="badge bg-primary">InTransit</span></dt>
+                            <dd class="small">Truck is en route to delivery location</dd>
+                            
+                            <dt><span class="badge bg-success">Delivered</span></dt>
+                            <dd class="small">Order has been completed and delivered</dd>
+                            
+                            <dt><span class="badge bg-secondary">Cancelled</span></dt>
+                            <dd class="small mb-0">Order has been cancelled</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int? OrderId { get; set; }
+
+    private bool _isNewOrder => !OrderId.HasValue;
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private Order? _order = null;
+    private List<Plant> _plants = new();
+    private List<Truck> _trucks = new();
+    private OrderFormModel _formModel = new();
+    private string _errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            // Load plants for dropdown
+            _plants = await OrderService.GetPlantsAsync();
+
+            if (!_isNewOrder)
+            {
+                // Load available trucks for editing
+                _trucks = await OrderService.GetAvailableTrucksAsync();
+
+                // Load existing order
+                _order = await OrderService.GetOrderByIdAsync(OrderId!.Value);
+                
+                if (_order != null)
+                {
+                    // Add the currently assigned truck if it's not in the available list
+                    if (_order.TruckId.HasValue && _order.Truck != null)
+                    {
+                        if (!_trucks.Any(t => t.Id == _order.TruckId))
+                        {
+                            _trucks.Add(_order.Truck);
+                        }
+                    }
+
+                    // Populate form from existing order
+                    _formModel = new OrderFormModel
+                    {
+                        CustomerName = _order.CustomerName,
+                        DistanceMiles = _order.DistanceMiles,
+                        PlantId = _order.PlantId?.ToString() ?? "",
+                        TruckId = _order.TruckId?.ToString() ?? ""
+                    };
+                }
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _isSaving = true;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            int? plantId = string.IsNullOrEmpty(_formModel.PlantId) ? null : int.Parse(_formModel.PlantId);
+            int? truckId = string.IsNullOrEmpty(_formModel.TruckId) ? null : int.Parse(_formModel.TruckId);
+
+            if (_isNewOrder)
+            {
+                var newOrder = await OrderService.CreateOrderAsync(
+                    _formModel.CustomerName,
+                    _formModel.DistanceMiles,
+                    plantId
+                );
+
+                NavigationManager.NavigateTo("/orders");
+            }
+            else
+            {
+                var updatedOrder = await OrderService.UpdateOrderAsync(
+                    OrderId!.Value,
+                    _formModel.CustomerName,
+                    _formModel.DistanceMiles,
+                    plantId,
+                    truckId
+                );
+
+                if (updatedOrder != null)
+                {
+                    NavigationManager.NavigateTo("/orders");
+                }
+                else
+                {
+                    _errorMessage = "Failed to update order. Order may not exist or is not in an editable state.";
+                }
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        NavigationManager.NavigateTo("/orders");
+    }
+
+    private class OrderFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Customer name is required")]
+        [System.ComponentModel.DataAnnotations.StringLength(200, ErrorMessage = "Customer name cannot exceed 200 characters")]
+        public string CustomerName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Distance is required")]
+        [System.ComponentModel.DataAnnotations.Range(1, 1000, ErrorMessage = "Distance must be between 1 and 1000 miles")]
+        public int DistanceMiles { get; set; }
+
+        public string PlantId { get; set; } = string.Empty;
+        public string TruckId { get; set; } = string.Empty;
+    }
+}

@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add database context
-builder.Services.AddDbContext<ConcreteDeliveryDbContext>(options =>
+// Add database context factory for concurrent access
+builder.Services.AddDbContextFactory<ConcreteDeliveryDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add RabbitMQ messaging
@@ -15,6 +15,9 @@ builder.Services.AddRabbitMqMessaging(builder.Configuration);
 
 // Add dashboard service as singleton for real-time updates
 builder.Services.AddSingleton<TruckDashboardService>();
+
+// Add order service as scoped
+builder.Services.AddScoped<OrderService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

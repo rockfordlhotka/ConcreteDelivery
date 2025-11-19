@@ -10,7 +10,7 @@
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">
-            <h1 class="display-4">🚛 Truck Dashboard</h1>
+            <h1 class="display-4">Truck Dashboard</h1>
             <p class="lead">Real-time truck status monitoring</p>
         </div>
     </div>
@@ -56,7 +56,7 @@
                     <div class="status-column">
                         @if (truck.Status == "Available")
                         {
-                            <div class="truck-icon available">�</div>
+                            <div class="truck-icon available">🚚</div>
                         }
                     </div>
                     
@@ -108,7 +108,7 @@
         <div class="row mt-4">
             <div class="col-12">
                 <div class="alert alert-info">
-                    <strong>ℹ️ Real-time Updates:</strong> This dashboard automatically updates when trucks change status via RabbitMQ messages.
+                    <strong>ℹ Real-time Updates:</strong> This dashboard automatically updates when trucks change status via RabbitMQ messages.
                 </div>
             </div>
         </div>

@@ -52,7 +52,8 @@ public class TruckDashboardService : IDisposable
     private async Task LoadTruckStatusesFromDatabaseAsync()
     {
         using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<ConcreteDeliveryDbContext>();
+        var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ConcreteDeliveryDbContext>>();
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
         var trucks = await dbContext.Trucks
             .Include(t => t.CurrentStatus)
