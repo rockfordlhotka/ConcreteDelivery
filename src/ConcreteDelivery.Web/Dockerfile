@@ -23,8 +23,10 @@ WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
 
-# Create a non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create a non-root user (use existing app user if available)
+RUN groupadd -r appuser || true && \
+    useradd -r -g appuser -u 1001 appuser || true && \
+    chown -R appuser:appuser /app
 USER appuser
 
 COPY --from=publish /app/publish .

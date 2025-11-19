@@ -27,10 +27,10 @@ From the repository root:
 
 ```bash
 # Build the image (from repo root, not src/ConcreteDelivery.Web)
-docker build -f src/ConcreteDelivery.Web/Dockerfile -t rockfordlhotka/concretedelivery-web:latest .
+docker build -f src/ConcreteDelivery.Web/Dockerfile -t rockylhotka/concretedelivery-web:latest .
 
 # Push to Docker Hub
-docker push rockfordlhotka/concretedelivery-web:latest
+docker push rockylhotka/concretedelivery-web:latest
 ```
 
 ### 2. Create Kubernetes Secrets
@@ -148,8 +148,8 @@ To deploy a new version:
 
 ```bash
 # Build and push new image
-docker build -f src/ConcreteDelivery.Web/Dockerfile -t rockfordlhotka/concretedelivery-web:latest .
-docker push rockfordlhotka/concretedelivery-web:latest
+docker build -f src/ConcreteDelivery.Web/Dockerfile -t rockylhotka/concretedelivery-web:latest .
+docker push rockylhotka/concretedelivery-web:latest
 
 # Force pods to pull new image
 kubectl rollout restart deployment/concretedelivery-web -n concretedelivery
