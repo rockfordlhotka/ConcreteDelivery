@@ -86,6 +86,9 @@ public class TruckSimulationService : BackgroundService
 
             _logger.LogInformation("Successfully subscribed to order cancellation events");
 
+            // Start periodic check for assigned trucks (backup for missed messages)
+            _ = Task.Run(async () => await PeriodicAssignedTrucksCheckAsync(stoppingToken), stoppingToken);
+
             // Keep the service running
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -324,6 +327,15 @@ public class TruckSimulationService : BackgroundService
 
             foreach (var (truckId, orderId, driverName) in assignedTrucks)
             {
+                // Skip if truck workflow is already active
+                if (_activeTrucks.ContainsKey(truckId))
+                {
+                    _logger.LogDebug(
+                        "Truck {TruckId} workflow already active - skipping",
+                        truckId);
+                    continue;
+                }
+
                 _logger.LogInformation(
                     "Starting workflow for truck {TruckId} (driver: {DriverName}) with order {OrderId}",
                     truckId, driverName, orderId);
@@ -1014,6 +1026,35 @@ public class TruckSimulationService : BackgroundService
         var variancePercent = _random.Next(-TravelVariancePercent, TravelVariancePercent + 1);
         var variance = (baseTime * variancePercent) / 100;
         return Math.Max(2, baseTime + variance); // Minimum 2 seconds
+    }
+
+    /// <summary>
+    /// Periodically check for assigned trucks that haven't started (backup for missed messages)
+    /// </summary>
+    private async Task PeriodicAssignedTrucksCheckAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting periodic assigned trucks check (every 30 seconds)");
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+
+                try
+                {
+                    await ProcessAssignedTrucksAsync(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in periodic assigned trucks check");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Periodic assigned trucks check cancelled");
+        }
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
