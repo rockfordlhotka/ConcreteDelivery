@@ -522,7 +522,7 @@ public class TruckSimulationService : BackgroundService
 
             // If truck was still at plant (Assigned or Loading), it goes directly to washing
             // Otherwise, it needs to return from the job site first
-            if (currentStatus == "Assigned" || currentStatus == TruckStatus.Loading)
+            if (currentStatus == TruckStatus.Assigned || currentStatus == TruckStatus.Loading)
             {
                 _logger.LogInformation(
                     "Truck {TruckId} was still at plant - skipping return trip, going directly to washing",
@@ -569,7 +569,7 @@ public class TruckSimulationService : BackgroundService
                 new TruckStatusChangedEvent
                 {
                     TruckId = truckId.ToString(),
-                    PreviousStatus = (currentStatus == "Assigned" || currentStatus == TruckStatus.Loading) ? currentStatus : TruckStatus.Returning,
+                    PreviousStatus = (currentStatus == TruckStatus.Assigned || currentStatus == TruckStatus.Loading) ? currentStatus : TruckStatus.Returning,
                     NewStatus = TruckStatus.Washing
                 },
                 exchange: ExchangeNames.TruckEvents,
@@ -614,7 +614,7 @@ public class TruckSimulationService : BackgroundService
                     TruckId = truckId.ToString()
                 },
                 exchange: ExchangeNames.TruckEvents,
-                routingKey: "truck.idle");
+                routingKey: RoutingKeys.Truck.Idle);
 
             _logger.LogInformation(
                 "Truck {TruckId} completed return from cancelled order and is now available",
@@ -974,7 +974,7 @@ public class TruckSimulationService : BackgroundService
                 TruckId = truckId.ToString()
             },
             exchange: ExchangeNames.TruckEvents,
-            routingKey: "truck.idle");
+            routingKey: RoutingKeys.Truck.Idle);
 
         // Publish order delivered event
         await _messagePublisher.PublishAsync(

@@ -1,4 +1,5 @@
 using ConcreteDelivery.Messaging;
+using ConcreteDelivery.Messaging.Constants;
 using ConcreteDelivery.Messaging.Messages;
 
 namespace ConcreteDelivery.Web.Examples;
@@ -43,7 +44,8 @@ public static class MessagingIntegrationExample
                 Address = address
             };
 
-            await _publisher.PublishCommandAsync(command);
+            var routingKey = $"truck.{command.TruckId}.enroute";
+            await _publisher.PublishAsync(command, ExchangeNames.TruckCommands, routingKey);
 
             _logger.LogInformation(
                 "Dispatched truck {TruckId} to job site {JobSiteId}",
@@ -58,7 +60,8 @@ public static class MessagingIntegrationExample
                 JobSiteId = jobSiteId
             };
 
-            await _publisher.PublishCommandAsync(command);
+            var routingKey = $"truck.{command.TruckId}.startpouring";
+            await _publisher.PublishAsync(command, ExchangeNames.TruckCommands, routingKey);
 
             _logger.LogInformation(
                 "Sent start pouring command for truck {TruckId} at job site {JobSiteId}",
@@ -88,8 +91,8 @@ public static class MessagingIntegrationExample
             await _consumer.StartConsumingAsync<TruckStatusChangedEvent>(
                 queueName: "web.truck.statuschanged",
                 handler: HandleStatusChanged,
-                exchangeName: "concrete.events",
-                routingKey: "truck.*.truckstatuschanged",
+                exchangeName: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.StatusChanged,
                 cancellationToken: stoppingToken);
         }
 

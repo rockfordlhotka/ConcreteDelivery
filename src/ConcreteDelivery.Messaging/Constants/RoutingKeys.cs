@@ -18,6 +18,7 @@ public static class RoutingKeys
         public const string ReturnedToPlant = "truck.returned.plant";
         public const string WashStarted = "truck.wash.started";
         public const string WashCompleted = "truck.wash.completed";
+        public const string Idle = "truck.idle";
     }
     
     /// <summary>

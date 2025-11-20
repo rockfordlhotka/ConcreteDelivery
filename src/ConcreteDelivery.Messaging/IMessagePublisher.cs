@@ -13,15 +13,4 @@ public interface IMessagePublisher
     Task PublishAsync<TMessage>(TMessage message, string exchange, string routingKey = "") 
         where TMessage : IMessage;
 
-    /// <summary>
-    /// Publishes a command message
-    /// </summary>
-    Task PublishCommandAsync<TCommand>(TCommand command) 
-        where TCommand : TruckCommand;
-
-    /// <summary>
-    /// Publishes an event message
-    /// </summary>
-    Task PublishEventAsync<TEvent>(TEvent eventMessage) 
-        where TEvent : TruckEvent;
 }

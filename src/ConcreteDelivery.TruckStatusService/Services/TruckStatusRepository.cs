@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ConcreteDelivery.Data;
 using ConcreteDelivery.Data.Entities;
+using MessagingTruckStatus = ConcreteDelivery.Messaging.Constants.TruckStatus;
 using Microsoft.EntityFrameworkCore;
 
 namespace ConcreteDelivery.TruckStatusService.Services;
@@ -176,7 +177,7 @@ public class TruckStatusRepository
             await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
             
             return await context.TruckStatuses
-                .Where(ts => ts.Status == "Assigned" && ts.CurrentOrderId != null)
+                .Where(ts => ts.Status == MessagingTruckStatus.Assigned && ts.CurrentOrderId != null)
                 .Include(ts => ts.Truck)
                 .Select(ts => new
                 {
@@ -208,12 +209,12 @@ public class TruckStatusRepository
             
             var intermediateStatuses = new[]
             {
-                "Loading",
-                "EnRoute",
-                "AtJobSite",
-                "Delivering",
-                "Returning",
-                "Washing"
+                MessagingTruckStatus.Loading,
+                MessagingTruckStatus.EnRoute,
+                MessagingTruckStatus.AtJobSite,
+                MessagingTruckStatus.Delivering,
+                MessagingTruckStatus.Returning,
+                MessagingTruckStatus.Washing
             };
 
             return await context.TruckStatuses

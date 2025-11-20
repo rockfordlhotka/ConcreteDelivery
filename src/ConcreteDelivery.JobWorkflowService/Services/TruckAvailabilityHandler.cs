@@ -40,7 +40,7 @@ public class TruckAvailabilityHandler : BackgroundService
                 queueName: "job-workflow-service-truck-idle",
                 handler: HandleTruckIdleAsync,
                 exchangeName: ExchangeNames.TruckEvents,
-                routingKey: "truck.idle",
+                routingKey: RoutingKeys.Truck.Idle,
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation("Successfully subscribed to truck idle events");

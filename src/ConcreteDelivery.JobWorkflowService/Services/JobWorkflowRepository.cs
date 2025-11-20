@@ -1,5 +1,6 @@
 using ConcreteDelivery.Data;
 using ConcreteDelivery.Data.Entities;
+using MessagingTruckStatus = ConcreteDelivery.Messaging.Constants.TruckStatus;
 using Microsoft.EntityFrameworkCore;
 
 namespace ConcreteDelivery.JobWorkflowService.Services;
@@ -75,7 +76,7 @@ public class JobWorkflowRepository
             .FirstOrDefaultAsync(ts => ts.TruckId == truckId, cancellationToken);
         if (truckStatus != null)
         {
-            truckStatus.Status = "Assigned";
+            truckStatus.Status = MessagingTruckStatus.Assigned;
             truckStatus.CurrentOrderId = orderId;
             truckStatus.UpdatedAt = DateTime.UtcNow;
         }

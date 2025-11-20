@@ -13,8 +13,6 @@ public class MessagePublisher : IMessagePublisher
 {
     private readonly IRabbitMqConnection _connection;
     private readonly ILogger<MessagePublisher> _logger;
-    private const string CommandExchange = "concrete.commands";
-    private const string EventExchange = "concrete.events";
 
     public MessagePublisher(
         IRabbitMqConnection connection,
@@ -68,19 +66,5 @@ public class MessagePublisher : IMessagePublisher
         _logger.LogInformation(
             "Published message {MessageType} with ID {MessageId} to exchange {Exchange} with routing key {RoutingKey}",
             message.GetType().Name, message.MessageId, exchange, routingKey);
-    }
-
-    public Task PublishCommandAsync<TCommand>(TCommand command) 
-        where TCommand : TruckCommand
-    {
-        var routingKey = $"truck.{command.TruckId}.{command.GetType().Name.Replace("Command", "").ToLowerInvariant()}";
-        return PublishAsync(command, CommandExchange, routingKey);
-    }
-
-    public Task PublishEventAsync<TEvent>(TEvent eventMessage) 
-        where TEvent : TruckEvent
-    {
-        var routingKey = $"truck.{eventMessage.TruckId}.{eventMessage.GetType().Name.Replace("Event", "").ToLowerInvariant()}";
-        return PublishAsync(eventMessage, EventExchange, routingKey);
     }
 }

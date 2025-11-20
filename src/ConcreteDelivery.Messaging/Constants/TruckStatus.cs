@@ -11,6 +11,11 @@ public static class TruckStatus
     public const string Available = "Available";
     
     /// <summary>
+    /// Truck is assigned to an order but not yet loading
+    /// </summary>
+    public const string Assigned = "Assigned";
+
+    /// <summary>
     /// Truck is being loaded with materials
     /// </summary>
     public const string Loading = "Loading";
@@ -46,6 +51,7 @@ public static class TruckStatus
     public static readonly string[] All = 
     {
         Available,
+        Assigned,
         Loading,
         EnRoute,
         AtJobSite,
