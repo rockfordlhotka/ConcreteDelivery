@@ -25,12 +25,19 @@ public class TruckSimulationService : BackgroundService
     private readonly ILogger<TruckSimulationService> _logger;
     private readonly ActivitySource _activitySource;
     private readonly ConcurrentDictionary<int, CancellationTokenSource> _activeTrucks;
+    private readonly Random _random;
 
     // Simulation timing constants (in seconds)
-    private const int LoadingTimeSeconds = 15;
-    private const int DeliveryTimeSeconds = 15;
-    private const int WashingTimeSeconds = 10;
+    private const int BaseLoadingTimeSeconds = 15;
+    private const int BaseDeliveryTimeSeconds = 15;
+    private const int BaseWashingTimeSeconds = 10;
     private const int SecondsPerMile = 2;
+    
+    // Randomness ranges (in seconds)
+    private const int LoadingVarianceSeconds = 5;      // ±5 seconds
+    private const int DeliveryVarianceSeconds = 5;     // ±5 seconds
+    private const int WashingVarianceSeconds = 3;      // ±3 seconds
+    private const int TravelVariancePercent = 20;      // ±20% of calculated travel time
 
     public TruckSimulationService(
         IMessageConsumer messageConsumer,
@@ -44,6 +51,7 @@ public class TruckSimulationService : BackgroundService
         _logger = logger;
         _activitySource = new ActivitySource("ConcreteDelivery.TruckStatusService");
         _activeTrucks = new ConcurrentDictionary<int, CancellationTokenSource>();
+        _random = new Random();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,6 +75,16 @@ public class TruckSimulationService : BackgroundService
                 cancellationToken: stoppingToken);
 
             _logger.LogInformation("Successfully subscribed to truck assignment events");
+
+            // Subscribe to order cancellation events
+            await _messageConsumer.StartConsumingAsync<OrderCancelledEvent>(
+                queueName: "truck-status-service-cancellations",
+                handler: HandleOrderCancelledAsync,
+                exchangeName: ExchangeNames.OrderEvents,
+                routingKey: RoutingKeys.Order.Cancelled,
+                cancellationToken: stoppingToken);
+
+            _logger.LogInformation("Successfully subscribed to order cancellation events");
 
             // Keep the service running
             while (!stoppingToken.IsCancellationRequested)
@@ -205,8 +223,11 @@ public class TruckSimulationService : BackgroundService
                 return;
             }
 
-            var travelTimeToSite = order.DistanceMiles * SecondsPerMile;
-            var travelTimeToYard = order.DistanceMiles * SecondsPerMile;
+            // Calculate randomized times for recovery
+            var deliveryTime = CalculateDeliveryTime();
+            var washingTime = CalculateWashingTime();
+            var travelTimeToSite = CalculateTravelTime(order.DistanceMiles);
+            var travelTimeToYard = CalculateTravelTime(order.DistanceMiles);
 
             _logger.LogInformation(
                 "Resuming workflow for truck {TruckId} from {CurrentState}",
@@ -219,28 +240,28 @@ public class TruckSimulationService : BackgroundService
                 case TruckStatus.Loading:
                     // Skip to travel phase
                     await SimulateTravelToSiteAsync(truckId, orderId, travelTimeToSite, repository, cancellationToken);
-                    await SimulateDeliveryAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateDeliveryAsync(truckId, orderId, deliveryTime, repository, cancellationToken);
                     await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
-                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, washingTime, repository, cancellationToken);
                     break;
 
                 case TruckStatus.EnRoute:
                     // Skip to delivery
-                    await SimulateDeliveryAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateDeliveryAsync(truckId, orderId, deliveryTime, repository, cancellationToken);
                     await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
-                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, washingTime, repository, cancellationToken);
                     break;
 
                 case TruckStatus.AtJobSite:
                 case TruckStatus.Delivering:
                     // Skip to return
                     await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
-                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, washingTime, repository, cancellationToken);
                     break;
 
                 case TruckStatus.Returning:
                     // Just do washing
-                    await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+                    await SimulateWashingAsync(truckId, orderId, washingTime, repository, cancellationToken);
                     break;
 
                 case TruckStatus.Washing:
@@ -380,6 +401,228 @@ public class TruckSimulationService : BackgroundService
         }
     }
 
+    private async Task HandleOrderCancelledAsync(OrderCancelledEvent cancelEvent)
+    {
+        using var activity = _activitySource.StartActivity("HandleOrderCancelled");
+        activity?.SetTag("order.id", cancelEvent.OrderId);
+
+        try
+        {
+            _logger.LogInformation(
+                "Order {OrderId} cancelled - checking for assigned truck",
+                cancelEvent.OrderId);
+
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<TruckStatusRepository>();
+
+            // Find which truck (if any) was assigned to this order
+            var truckStatus = await repository.GetTruckByOrderIdAsync(cancelEvent.OrderId, CancellationToken.None);
+            
+            if (truckStatus == null)
+            {
+                _logger.LogInformation(
+                    "No truck found for cancelled order {OrderId}",
+                    cancelEvent.OrderId);
+                return;
+            }
+
+            var (truckId, currentStatus) = truckStatus.Value;
+
+            _logger.LogInformation(
+                "Truck {TruckId} was assigned to cancelled order {OrderId} (current status: {Status})",
+                truckId, cancelEvent.OrderId, currentStatus);
+
+            // Cancel the active workflow for this truck if it's running
+            if (_activeTrucks.TryRemove(truckId, out var cts))
+            {
+                _logger.LogInformation("Cancelling active workflow for truck {TruckId}", truckId);
+                cts.Cancel();
+                cts.Dispose();
+            }
+
+            // Check current status and determine action
+            if (currentStatus == TruckStatus.Available)
+            {
+                _logger.LogInformation(
+                    "Truck {TruckId} is already available - no action needed",
+                    truckId);
+            }
+            else if (currentStatus == TruckStatus.Washing || currentStatus == TruckStatus.Returning)
+            {
+                _logger.LogInformation(
+                    "Truck {TruckId} is already returning/washing - no action needed",
+                    truckId);
+            }
+            else
+            {
+                // Any other status (Assigned, Loading, EnRoute, Delivering, AtJobSite)
+                // needs to go through return-to-plant workflow
+                _logger.LogInformation(
+                    "Truck {TruckId} needs to return to plant from status {Status}",
+                    truckId, currentStatus);
+
+                // Start a return-to-plant workflow
+                var truckCts = new CancellationTokenSource();
+                _activeTrucks[truckId] = truckCts;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await SimulateReturnFromCancelledOrderAsync(truckId, currentStatus, repository, truckCts.Token);
+                    }
+                    finally
+                    {
+                        _activeTrucks.TryRemove(truckId, out _);
+                        truckCts.Dispose();
+                    }
+                }, truckCts.Token);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error handling order cancellation for order {OrderId}",
+                cancelEvent.OrderId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+        }
+    }
+
+    private async Task SimulateReturnFromCancelledOrderAsync(
+        int truckId,
+        string currentStatus,
+        TruckStatusRepository repository,
+        CancellationToken cancellationToken)
+    {
+        using var activity = _activitySource.StartActivity("SimulateReturnFromCancelledOrder");
+        activity?.SetTag("truck.id", truckId);
+        activity?.SetTag("previous.status", currentStatus);
+
+        try
+        {
+            _logger.LogInformation(
+                "Starting return workflow for truck {TruckId} from cancelled order (was in {Status})",
+                truckId, currentStatus);
+
+            // Get a rough distance estimate for return (use 20 miles as average)
+            var estimatedReturnTime = CalculateTravelTime(20);
+            var washTime = CalculateWashingTime();
+
+            // If truck was still at plant (Assigned or Loading), it goes directly to washing
+            // Otherwise, it needs to return from the job site first
+            if (currentStatus == "Assigned" || currentStatus == TruckStatus.Loading)
+            {
+                _logger.LogInformation(
+                    "Truck {TruckId} was still at plant - skipping return trip, going directly to washing",
+                    truckId);
+
+                // Skip the return trip - truck never left the plant
+                // Go straight to washing
+            }
+            else
+            {
+                // Truck was en route or at job site - needs to return
+                await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Returning, null, cancellationToken);
+
+                await _messagePublisher.PublishAsync(
+                    new TruckStatusChangedEvent
+                    {
+                        TruckId = truckId.ToString(),
+                        PreviousStatus = currentStatus,
+                        NewStatus = TruckStatus.Returning
+                    },
+                    exchange: ExchangeNames.TruckEvents,
+                    routingKey: RoutingKeys.Truck.StatusChanged);
+
+                _logger.LogInformation(
+                    "Truck {TruckId}: Returning to plant ({Time}s)",
+                    truckId, estimatedReturnTime);
+
+                // Simulate return time
+                await Task.Delay(TimeSpan.FromSeconds(estimatedReturnTime), cancellationToken);
+
+                await _messagePublisher.PublishAsync(
+                    new ReturnedToPlantEvent
+                    {
+                        TruckId = truckId.ToString()
+                    },
+                    exchange: ExchangeNames.TruckEvents,
+                    routingKey: RoutingKeys.Truck.ReturnedToPlant);
+            }
+
+            // Now wash the truck
+            await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Washing, null, cancellationToken);
+
+            await _messagePublisher.PublishAsync(
+                new TruckStatusChangedEvent
+                {
+                    TruckId = truckId.ToString(),
+                    PreviousStatus = (currentStatus == "Assigned" || currentStatus == TruckStatus.Loading) ? currentStatus : TruckStatus.Returning,
+                    NewStatus = TruckStatus.Washing
+                },
+                exchange: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.StatusChanged);
+
+            await _messagePublisher.PublishAsync(
+                new WashStartedEvent
+                {
+                    TruckId = truckId.ToString()
+                },
+                exchange: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.WashStarted);
+
+            _logger.LogInformation("Truck {TruckId}: Starting wash ({Time}s)", truckId, washTime);
+
+            await Task.Delay(TimeSpan.FromSeconds(washTime), cancellationToken);
+
+            await _messagePublisher.PublishAsync(
+                new WashCompletedEvent
+                {
+                    TruckId = truckId.ToString()
+                },
+                exchange: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.WashCompleted);
+
+            // Finally, make truck available
+            await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Available, null, cancellationToken);
+
+            await _messagePublisher.PublishAsync(
+                new TruckStatusChangedEvent
+                {
+                    TruckId = truckId.ToString(),
+                    PreviousStatus = TruckStatus.Washing,
+                    NewStatus = TruckStatus.Available
+                },
+                exchange: ExchangeNames.TruckEvents,
+                routingKey: RoutingKeys.Truck.StatusChanged);
+
+            await _messagePublisher.PublishAsync(
+                new TruckIdleEvent
+                {
+                    TruckId = truckId.ToString()
+                },
+                exchange: ExchangeNames.TruckEvents,
+                routingKey: "truck.idle");
+
+            _logger.LogInformation(
+                "Truck {TruckId} completed return from cancelled order and is now available",
+                truckId);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation(
+                "Return workflow cancelled for truck {TruckId}",
+                truckId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error in return workflow for truck {TruckId}",
+                truckId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+        }
+    }
+
     private async Task SimulateTruckWorkflowAsync(
         int truckId,
         int orderId,
@@ -402,32 +645,36 @@ public class TruckSimulationService : BackgroundService
                 return;
             }
 
-            var travelTimeToSite = order.DistanceMiles * SecondsPerMile;
-            var travelTimeToYard = order.DistanceMiles * SecondsPerMile;
-            var totalTime = LoadingTimeSeconds + travelTimeToSite + DeliveryTimeSeconds + 
-                           travelTimeToYard + WashingTimeSeconds;
+            // Calculate randomized times
+            var loadingTime = CalculateLoadingTime();
+            var deliveryTime = CalculateDeliveryTime();
+            var washingTime = CalculateWashingTime();
+            var travelTimeToSite = CalculateTravelTime(order.DistanceMiles);
+            var travelTimeToYard = CalculateTravelTime(order.DistanceMiles);
+            var totalTime = loadingTime + travelTimeToSite + deliveryTime + 
+                           travelTimeToYard + washingTime;
 
             _logger.LogInformation(
                 "Starting workflow for truck {TruckId} - Total estimated time: {TotalTime}s " +
                 "(Loading: {Loading}s, Travel to site: {TravelTo}s, Delivery: {Delivery}s, " +
                 "Travel to yard: {TravelBack}s, Wash: {Wash}s)",
-                truckId, totalTime, LoadingTimeSeconds, travelTimeToSite, DeliveryTimeSeconds,
-                travelTimeToYard, WashingTimeSeconds);
+                truckId, totalTime, loadingTime, travelTimeToSite, deliveryTime,
+                travelTimeToYard, washingTime);
 
             // Phase 1: Loading
-            await SimulateLoadingAsync(truckId, orderId, repository, cancellationToken);
+            await SimulateLoadingAsync(truckId, orderId, loadingTime, repository, cancellationToken);
 
             // Phase 2: Travel to job site
             await SimulateTravelToSiteAsync(truckId, orderId, travelTimeToSite, repository, cancellationToken);
 
             // Phase 3: Delivery/Pouring
-            await SimulateDeliveryAsync(truckId, orderId, repository, cancellationToken);
+            await SimulateDeliveryAsync(truckId, orderId, deliveryTime, repository, cancellationToken);
 
             // Phase 4: Travel back to yard
             await SimulateTravelToYardAsync(truckId, orderId, travelTimeToYard, repository, cancellationToken);
 
             // Phase 5: Washing
-            await SimulateWashingAsync(truckId, orderId, repository, cancellationToken);
+            await SimulateWashingAsync(truckId, orderId, washingTime, repository, cancellationToken);
 
             // Phase 6: Return to available status
             await CompleteWorkflowAsync(truckId, orderId, repository, cancellationToken);
@@ -454,11 +701,12 @@ public class TruckSimulationService : BackgroundService
     private async Task SimulateLoadingAsync(
         int truckId,
         int orderId,
+        int loadingTimeSeconds,
         TruckStatusRepository repository,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Truck {TruckId}: Starting loading phase ({Time}s)", 
-            truckId, LoadingTimeSeconds);
+            truckId, loadingTimeSeconds);
 
         // Update status to Loading
         await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Loading, orderId, cancellationToken);
@@ -476,7 +724,7 @@ public class TruckSimulationService : BackgroundService
             routingKey: RoutingKeys.Truck.StatusChanged);
 
         // Simulate loading time
-        await Task.Delay(TimeSpan.FromSeconds(LoadingTimeSeconds), cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(loadingTimeSeconds), cancellationToken);
 
         // Publish materials loaded event
         await _messagePublisher.PublishAsync(
@@ -548,11 +796,12 @@ public class TruckSimulationService : BackgroundService
     private async Task SimulateDeliveryAsync(
         int truckId,
         int orderId,
+        int deliveryTimeSeconds,
         TruckStatusRepository repository,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Truck {TruckId}: Starting delivery/pouring ({Time}s)", 
-            truckId, DeliveryTimeSeconds);
+            truckId, deliveryTimeSeconds);
 
         // Update status to Delivering
         await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Delivering, orderId, cancellationToken);
@@ -580,7 +829,7 @@ public class TruckSimulationService : BackgroundService
             routingKey: RoutingKeys.Truck.PouringStarted);
 
         // Simulate delivery time
-        await Task.Delay(TimeSpan.FromSeconds(DeliveryTimeSeconds), cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(deliveryTimeSeconds), cancellationToken);
 
         // Publish pouring completed event
         await _messagePublisher.PublishAsync(
@@ -638,11 +887,12 @@ public class TruckSimulationService : BackgroundService
     private async Task SimulateWashingAsync(
         int truckId,
         int orderId,
+        int washingTimeSeconds,
         TruckStatusRepository repository,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Truck {TruckId}: Starting wash ({Time}s)", 
-            truckId, WashingTimeSeconds);
+            truckId, washingTimeSeconds);
 
         // Update status to Washing
         await repository.UpdateTruckStatusAsync(truckId, TruckStatus.Washing, orderId, cancellationToken);
@@ -668,7 +918,7 @@ public class TruckSimulationService : BackgroundService
             routingKey: RoutingKeys.Truck.WashStarted);
 
         // Simulate wash time
-        await Task.Delay(TimeSpan.FromSeconds(WashingTimeSeconds), cancellationToken);
+        await Task.Delay(TimeSpan.FromSeconds(washingTimeSeconds), cancellationToken);
 
         // Publish wash completed event
         await _messagePublisher.PublishAsync(
@@ -726,6 +976,44 @@ public class TruckSimulationService : BackgroundService
             routingKey: RoutingKeys.Order.Delivered);
 
         _logger.LogInformation("Truck {TruckId}: Now available for new orders", truckId);
+    }
+
+    /// <summary>
+    /// Calculate randomized loading time
+    /// </summary>
+    private int CalculateLoadingTime()
+    {
+        var variance = _random.Next(-LoadingVarianceSeconds, LoadingVarianceSeconds + 1);
+        return Math.Max(5, BaseLoadingTimeSeconds + variance); // Minimum 5 seconds
+    }
+
+    /// <summary>
+    /// Calculate randomized delivery time
+    /// </summary>
+    private int CalculateDeliveryTime()
+    {
+        var variance = _random.Next(-DeliveryVarianceSeconds, DeliveryVarianceSeconds + 1);
+        return Math.Max(5, BaseDeliveryTimeSeconds + variance); // Minimum 5 seconds
+    }
+
+    /// <summary>
+    /// Calculate randomized washing time
+    /// </summary>
+    private int CalculateWashingTime()
+    {
+        var variance = _random.Next(-WashingVarianceSeconds, WashingVarianceSeconds + 1);
+        return Math.Max(3, BaseWashingTimeSeconds + variance); // Minimum 3 seconds
+    }
+
+    /// <summary>
+    /// Calculate randomized travel time based on distance
+    /// </summary>
+    private int CalculateTravelTime(int distanceMiles)
+    {
+        var baseTime = distanceMiles * SecondsPerMile;
+        var variancePercent = _random.Next(-TravelVariancePercent, TravelVariancePercent + 1);
+        var variance = (baseTime * variancePercent) / 100;
+        return Math.Max(2, baseTime + variance); // Minimum 2 seconds
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

@@ -237,4 +237,36 @@ public class TruckStatusRepository
             return new List<(int, int?, string, string)>();
         }
     }
+
+    /// <summary>
+    /// Gets the truck ID and status for a given order ID
+    /// </summary>
+    public async Task<(int TruckId, string Status)?> GetTruckByOrderIdAsync(
+        int orderId,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("GetTruckByOrderId");
+        activity?.SetTag("order.id", orderId);
+
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            var truckStatus = await context.TruckStatuses
+                .Where(ts => ts.CurrentOrderId == orderId)
+                .Select(ts => new { ts.TruckId, ts.Status })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (truckStatus == null)
+                return null;
+
+            return (truckStatus.TruckId, truckStatus.Status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting truck for order {OrderId}", orderId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            return null;
+        }
+    }
 }

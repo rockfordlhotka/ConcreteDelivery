@@ -82,42 +82,15 @@ public class OrderCancellationHandler : BackgroundService
 
             if (truckId == null)
             {
-                _logger.LogWarning(
-                    "No truck assigned to cancelled order {OrderId}",
+                _logger.LogInformation(
+                    "No truck assigned to cancelled order {OrderId} - no action needed",
                     cancelEvent.OrderId);
                 return;
             }
 
             _logger.LogInformation(
-                "Sending truck {TruckId} back to plant due to order cancellation",
-                truckId);
-
-            // Update truck status to "Returning"
-            await repository.UpdateTruckStatusAsync(truckId.Value, "Returning", null);
-
-            // Publish truck status change event
-            await _messagePublisher.PublishAsync(
-                new TruckStatusChangedEvent
-                {
-                    TruckId = truckId.Value.ToString(),
-                    PreviousStatus = "Assigned",
-                    NewStatus = "Returning"
-                },
-                exchange: ExchangeNames.TruckEvents,
-                routingKey: RoutingKeys.Truck.StatusChanged);
-
-            // Publish return to plant command
-            await _messagePublisher.PublishAsync(
-                new ReturnToPlantCommand
-                {
-                    TruckId = truckId.Value.ToString()
-                },
-                exchange: ExchangeNames.TruckCommands,
-                routingKey: $"truck.{truckId}.returntoplant");
-
-            _logger.LogInformation(
-                "Successfully handled cancellation of order {OrderId} - Truck {TruckId} returning to plant",
-                cancelEvent.OrderId, truckId);
+                "Order {OrderId} with truck {TruckId} cancelled - truck will be handled by TruckStatusService",
+                cancelEvent.OrderId, truckId.Value);
         }
         catch (Exception ex)
         {

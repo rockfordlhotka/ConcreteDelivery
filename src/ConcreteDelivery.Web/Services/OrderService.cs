@@ -194,11 +194,8 @@ public class OrderService
         order.Status = "Cancelled";
         order.UpdatedAt = DateTime.UtcNow;
 
-        // If order had a truck assigned, clear it
-        if (order.TruckId.HasValue)
-        {
-            order.TruckId = null;
-        }
+        // Keep the truck assigned - it will be cleared once truck completes return workflow
+        // The TruckStatusService will handle returning the truck to available status
 
         await context.SaveChangesAsync();
 
